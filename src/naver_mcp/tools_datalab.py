@@ -9,8 +9,11 @@ from .models import (
     DataLabCategoryGroup,
     DataLabSearchTrendsRequest,
     DataLabKeywordGroup,
+    DataLabShoppingCategoryDetailRequest,
     DataLabShoppingCategoryTrendsRequest,
-    DataLabShoppingDeviceTrendsRequest,
+    DataLabShoppingKeywordDetailRequest,
+    DataLabShoppingKeywordGroup,
+    DataLabShoppingKeywordTrendsRequest,
 )
 from .normalize import (
     normalize_datalab_category_trends_response,
@@ -32,9 +35,45 @@ class DataLabClientProtocol(Protocol):
     ) -> Mapping[str, Any]:
         ...
 
-    def datalab_shopping_device_trends(
+    def datalab_shopping_category_device_trends(
         self,
-        request: DataLabShoppingDeviceTrendsRequest,
+        request: DataLabShoppingCategoryDetailRequest,
+    ) -> Mapping[str, Any]:
+        ...
+
+    def datalab_shopping_category_gender_trends(
+        self,
+        request: DataLabShoppingCategoryDetailRequest,
+    ) -> Mapping[str, Any]:
+        ...
+
+    def datalab_shopping_category_age_trends(
+        self,
+        request: DataLabShoppingCategoryDetailRequest,
+    ) -> Mapping[str, Any]:
+        ...
+
+    def datalab_shopping_keyword_trends(
+        self,
+        request: DataLabShoppingKeywordTrendsRequest,
+    ) -> Mapping[str, Any]:
+        ...
+
+    def datalab_shopping_keyword_device_trends(
+        self,
+        request: DataLabShoppingKeywordDetailRequest,
+    ) -> Mapping[str, Any]:
+        ...
+
+    def datalab_shopping_keyword_gender_trends(
+        self,
+        request: DataLabShoppingKeywordDetailRequest,
+    ) -> Mapping[str, Any]:
+        ...
+
+    def datalab_shopping_keyword_age_trends(
+        self,
+        request: DataLabShoppingKeywordDetailRequest,
     ) -> Mapping[str, Any]:
         ...
 
@@ -91,22 +130,14 @@ class DataLabTools:
         gender: str = "",
         ages: Optional[list[str]] = None,
     ) -> dict[str, Any]:
-        # category/param 이름 차이를 여기서 흡수해 MCP 입력 형태를 단순하게 유지한다.
-        category_groups = [
-            DataLabCategoryGroup(
-                name=str(group.get("name") or ""),
-                params=list(group.get("params") or group.get("param") or []),
-            )
-            for group in categories
-        ]
-        request = DataLabShoppingCategoryTrendsRequest(
+        request = self._build_category_trends_request(
             start_date=start_date,
             end_date=end_date,
             time_unit=time_unit,
-            categories=category_groups,
+            categories=categories,
             device=device,
             gender=gender,
-            ages=list(ages or []),
+            ages=ages,
         )
         return self._run_datalab_tool(
             "datalab_shopping_category_trends",
@@ -115,6 +146,204 @@ class DataLabTools:
             normalize_datalab_category_trends_response,
         )
 
+    def datalab_shopping_category_device_trends(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        request = self._build_category_detail_request(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+        return self._run_datalab_tool(
+            "datalab_shopping_category_device_trends",
+            request.to_payload(),
+            lambda: self.client.datalab_shopping_category_device_trends(request),
+            normalize_datalab_device_trends_response,
+        )
+
+    def datalab_shopping_category_gender_trends(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        request = self._build_category_detail_request(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+        return self._run_datalab_tool(
+            "datalab_shopping_category_gender_trends",
+            request.to_payload(),
+            lambda: self.client.datalab_shopping_category_gender_trends(request),
+            normalize_datalab_device_trends_response,
+        )
+
+    def datalab_shopping_category_age_trends(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        request = self._build_category_detail_request(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+        return self._run_datalab_tool(
+            "datalab_shopping_category_age_trends",
+            request.to_payload(),
+            lambda: self.client.datalab_shopping_category_age_trends(request),
+            normalize_datalab_device_trends_response,
+        )
+
+    def datalab_shopping_keyword_trends(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        keywords: list[dict[str, Any]],
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        request = self._build_keyword_trends_request(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            keywords=keywords,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+        return self._run_datalab_tool(
+            "datalab_shopping_keyword_trends",
+            request.to_payload(),
+            lambda: self.client.datalab_shopping_keyword_trends(request),
+            normalize_datalab_category_trends_response,
+        )
+
+    def datalab_shopping_keyword_device_trends(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        keyword: str,
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        request = self._build_keyword_detail_request(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            keyword=keyword,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+        return self._run_datalab_tool(
+            "datalab_shopping_keyword_device_trends",
+            request.to_payload(),
+            lambda: self.client.datalab_shopping_keyword_device_trends(request),
+            normalize_datalab_device_trends_response,
+        )
+
+    def datalab_shopping_keyword_gender_trends(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        keyword: str,
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        request = self._build_keyword_detail_request(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            keyword=keyword,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+        return self._run_datalab_tool(
+            "datalab_shopping_keyword_gender_trends",
+            request.to_payload(),
+            lambda: self.client.datalab_shopping_keyword_gender_trends(request),
+            normalize_datalab_device_trends_response,
+        )
+
+    def datalab_shopping_keyword_age_trends(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        keyword: str,
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        request = self._build_keyword_detail_request(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            keyword=keyword,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+        return self._run_datalab_tool(
+            "datalab_shopping_keyword_age_trends",
+            request.to_payload(),
+            lambda: self.client.datalab_shopping_keyword_age_trends(request),
+            normalize_datalab_device_trends_response,
+        )
+
+    # 기존 이름과의 호환성을 위해 category/device 엔드포인트의 별칭으로 유지한다.
     def datalab_shopping_device_trends(
         self,
         *,
@@ -126,7 +355,56 @@ class DataLabTools:
         gender: str = "",
         ages: Optional[list[str]] = None,
     ) -> dict[str, Any]:
-        request = DataLabShoppingDeviceTrendsRequest(
+        return self.datalab_shopping_category_device_trends(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+
+    def _build_category_trends_request(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        categories: list[dict[str, Any]],
+        device: str,
+        gender: str,
+        ages: Optional[list[str]],
+    ) -> DataLabShoppingCategoryTrendsRequest:
+        category_groups = [
+            DataLabCategoryGroup(
+                name=str(group.get("name") or ""),
+                params=list(group.get("params") or group.get("param") or []),
+            )
+            for group in categories
+        ]
+        return DataLabShoppingCategoryTrendsRequest(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            categories=category_groups,
+            device=device,
+            gender=gender,
+            ages=list(ages or []),
+        )
+
+    def _build_category_detail_request(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        device: str,
+        gender: str,
+        ages: Optional[list[str]],
+    ) -> DataLabShoppingCategoryDetailRequest:
+        return DataLabShoppingCategoryDetailRequest(
             start_date=start_date,
             end_date=end_date,
             time_unit=time_unit,
@@ -135,11 +413,59 @@ class DataLabTools:
             gender=gender,
             ages=list(ages or []),
         )
-        return self._run_datalab_tool(
-            "datalab_shopping_device_trends",
-            request.to_payload(),
-            lambda: self.client.datalab_shopping_device_trends(request),
-            normalize_datalab_device_trends_response,
+
+    def _build_keyword_trends_request(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        keywords: list[dict[str, Any]],
+        device: str,
+        gender: str,
+        ages: Optional[list[str]],
+    ) -> DataLabShoppingKeywordTrendsRequest:
+        # category/param 이름 차이를 여기서 흡수해 MCP 입력 형태를 단순하게 유지한다.
+        keyword_groups = [
+            DataLabShoppingKeywordGroup(
+                name=str(group.get("name") or ""),
+                params=list(group.get("params") or group.get("param") or []),
+            )
+            for group in keywords
+        ]
+        return DataLabShoppingKeywordTrendsRequest(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            keywords=keyword_groups,
+            device=device,
+            gender=gender,
+            ages=list(ages or []),
+        )
+
+    def _build_keyword_detail_request(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        keyword: str,
+        device: str,
+        gender: str,
+        ages: Optional[list[str]],
+    ) -> DataLabShoppingKeywordDetailRequest:
+        return DataLabShoppingKeywordDetailRequest(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            keyword=keyword,
+            device=device,
+            gender=gender,
+            ages=list(ages or []),
         )
 
     def _run_datalab_tool(

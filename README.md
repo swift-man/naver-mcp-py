@@ -38,6 +38,13 @@ Search tools:
 - `search_web`
 - `search_news`
 - `search_cafearticle`
+- `search_image`
+- `search_book`
+- `search_book_advanced`
+- `search_encyc`
+- `search_kin`
+- `search_shop`
+- `search_doc`
 - `spell_check`
 - `detect_adult_query`
 - `search_naver_auto`
@@ -46,7 +53,19 @@ DataLab tools:
 
 - `datalab_search_trends`
 - `datalab_shopping_category_trends`
+- `datalab_shopping_category_device_trends`
+- `datalab_shopping_category_gender_trends`
+- `datalab_shopping_category_age_trends`
+- `datalab_shopping_keyword_trends`
+- `datalab_shopping_keyword_device_trends`
+- `datalab_shopping_keyword_gender_trends`
+- `datalab_shopping_keyword_age_trends`
 - `datalab_shopping_device_trends`
+
+Notes:
+
+- `datalab_shopping_device_trends` is kept as a backward-compatible alias of `datalab_shopping_category_device_trends`
+- `search_book_advanced` wraps the Naver advanced book lookup and requires at least `title` or `isbn`
 
 ## Project Layout
 

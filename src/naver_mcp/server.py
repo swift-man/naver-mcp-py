@@ -39,12 +39,7 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         start: int = 1,
         sort: str = "random",
     ) -> dict[str, Any]:
-        return search_tools.search_local(
-            query=query,
-            display=display,
-            start=start,
-            sort=sort,
-        )
+        return search_tools.search_local(query=query, display=display, start=start, sort=sort)
 
     @server.tool()
     def search_blog(
@@ -53,12 +48,7 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         start: int = 1,
         sort: str = "sim",
     ) -> dict[str, Any]:
-        return search_tools.search_blog(
-            query=query,
-            display=display,
-            start=start,
-            sort=sort,
-        )
+        return search_tools.search_blog(query=query, display=display, start=start, sort=sort)
 
     @server.tool()
     def search_web(
@@ -75,12 +65,7 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         start: int = 1,
         sort: str = "sim",
     ) -> dict[str, Any]:
-        return search_tools.search_news(
-            query=query,
-            display=display,
-            start=start,
-            sort=sort,
-        )
+        return search_tools.search_news(query=query, display=display, start=start, sort=sort)
 
     @server.tool()
     def search_cafearticle(
@@ -97,6 +82,92 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         )
 
     @server.tool()
+    def search_image(
+        query: str,
+        display: int = 5,
+        start: int = 1,
+        sort: str = "sim",
+        filter: str = "all",
+    ) -> dict[str, Any]:
+        return search_tools.search_image(
+            query=query,
+            display=display,
+            start=start,
+            sort=sort,
+            filter=filter,
+        )
+
+    @server.tool()
+    def search_book(
+        query: str,
+        display: int = 5,
+        start: int = 1,
+        sort: str = "sim",
+    ) -> dict[str, Any]:
+        return search_tools.search_book(query=query, display=display, start=start, sort=sort)
+
+    @server.tool()
+    def search_book_advanced(
+        query: str = "",
+        display: int = 5,
+        start: int = 1,
+        sort: str = "sim",
+        title: str = "",
+        isbn: str = "",
+    ) -> dict[str, Any]:
+        return search_tools.search_book_advanced(
+            query=query,
+            display=display,
+            start=start,
+            sort=sort,
+            title=title,
+            isbn=isbn,
+        )
+
+    @server.tool()
+    def search_encyc(
+        query: str,
+        display: int = 5,
+        start: int = 1,
+    ) -> dict[str, Any]:
+        return search_tools.search_encyc(query=query, display=display, start=start)
+
+    @server.tool()
+    def search_kin(
+        query: str,
+        display: int = 5,
+        start: int = 1,
+        sort: str = "sim",
+    ) -> dict[str, Any]:
+        return search_tools.search_kin(query=query, display=display, start=start, sort=sort)
+
+    @server.tool()
+    def search_shop(
+        query: str,
+        display: int = 5,
+        start: int = 1,
+        sort: str = "sim",
+        filter: str = "",
+        exclude: str = "",
+    ) -> dict[str, Any]:
+        return search_tools.search_shop(
+            query=query,
+            display=display,
+            start=start,
+            sort=sort,
+            filter=filter,
+            exclude=exclude,
+        )
+
+    @server.tool()
+    def search_doc(
+        query: str,
+        display: int = 5,
+        start: int = 1,
+    ) -> dict[str, Any]:
+        return search_tools.search_doc(query=query, display=display, start=start)
+
+    @server.tool()
     def spell_check(query: str) -> dict[str, Any]:
         return search_tools.spell_check(query=query)
 
@@ -105,10 +176,7 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         return search_tools.detect_adult_query(query=query)
 
     @server.tool()
-    def search_naver_auto(
-        query: str,
-        display: int = 5,
-    ) -> dict[str, Any]:
+    def search_naver_auto(query: str, display: int = 5) -> dict[str, Any]:
         return search_tools.search_naver_auto(query=query, display=display)
 
     @server.tool()
@@ -145,6 +213,155 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
             ages=ages,
         )
 
+    @server.tool()
+    def datalab_shopping_category_device_trends(
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        return datalab_tools.datalab_shopping_category_device_trends(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+
+    @server.tool()
+    def datalab_shopping_category_gender_trends(
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        return datalab_tools.datalab_shopping_category_gender_trends(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+
+    @server.tool()
+    def datalab_shopping_category_age_trends(
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        return datalab_tools.datalab_shopping_category_age_trends(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+
+    @server.tool()
+    def datalab_shopping_keyword_trends(
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        keywords: list[dict[str, Any]],
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        return datalab_tools.datalab_shopping_keyword_trends(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            keywords=keywords,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+
+    @server.tool()
+    def datalab_shopping_keyword_device_trends(
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        keyword: str,
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        return datalab_tools.datalab_shopping_keyword_device_trends(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            keyword=keyword,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+
+    @server.tool()
+    def datalab_shopping_keyword_gender_trends(
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        keyword: str,
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        return datalab_tools.datalab_shopping_keyword_gender_trends(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            keyword=keyword,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+
+    @server.tool()
+    def datalab_shopping_keyword_age_trends(
+        start_date: str,
+        end_date: str,
+        time_unit: str,
+        category: str,
+        keyword: str,
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        return datalab_tools.datalab_shopping_keyword_age_trends(
+            start_date=start_date,
+            end_date=end_date,
+            time_unit=time_unit,
+            category=category,
+            keyword=keyword,
+            device=device,
+            gender=gender,
+            ages=ages,
+        )
+
+    # 기존 이름과의 호환성을 위해 category/device 엔드포인트를 별칭으로 유지한다.
     @server.tool()
     def datalab_shopping_device_trends(
         start_date: str,

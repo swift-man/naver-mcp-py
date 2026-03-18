@@ -75,6 +75,55 @@ def normalize_search_item(source: str, item: Mapping[str, Any]) -> dict[str, Any
         )
         return normalized
 
+    if source == "image":
+        normalized.update(
+            {
+                "thumbnail": str(item.get("thumbnail") or ""),
+                "size_height": str(item.get("sizeheight") or ""),
+                "size_width": str(item.get("sizewidth") or ""),
+            }
+        )
+        return normalized
+
+    if source == "book":
+        normalized.update(
+            {
+                "image": str(item.get("image") or ""),
+                "author": strip_html(item.get("author")),
+                "discount": str(item.get("discount") or ""),
+                "publisher": strip_html(item.get("publisher")),
+                "isbn": str(item.get("isbn") or ""),
+            }
+        )
+        if "description" in item:
+            normalized["description"] = snippet
+        return normalized
+
+    if source == "shop":
+        normalized.update(
+            {
+                "image": str(item.get("image") or ""),
+                "low_price": str(item.get("lprice") or ""),
+                "high_price": str(item.get("hprice") or ""),
+                "mall_name": strip_html(item.get("mallName")),
+                "product_id": str(item.get("productId") or ""),
+                "product_type": str(item.get("productType") or ""),
+                "brand": strip_html(item.get("brand")),
+                "maker": strip_html(item.get("maker")),
+                "category1": strip_html(item.get("category1")),
+                "category2": strip_html(item.get("category2")),
+                "category3": strip_html(item.get("category3")),
+                "category4": strip_html(item.get("category4")),
+            }
+        )
+        return normalized
+
+    if source == "encyc":
+        normalized["thumbnail"] = str(item.get("thumbnail") or "")
+        if "description" in item:
+            normalized["description"] = snippet
+        return normalized
+
     if item.get("originallink"):
         normalized["originallink"] = str(item["originallink"])
     if item.get("bloggername"):

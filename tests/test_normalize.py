@@ -69,6 +69,86 @@ class NormalizeTest(unittest.TestCase):
         self.assertFalse(result["changed"])
         self.assertFalse(result["meta"]["cached"])
 
+    def test_normalize_search_response_shapes_image_items(self) -> None:
+        payload = {
+            "total": 1,
+            "start": 1,
+            "display": 5,
+            "items": [
+                {
+                    "title": "<b>고양이</b> 사진",
+                    "link": "https://example.com/image/full",
+                    "thumbnail": "https://example.com/image/thumb.jpg",
+                    "sizeheight": "480",
+                    "sizewidth": "640",
+                }
+            ],
+        }
+
+        result = normalize_search_response("고양이", "image", payload, display=5, start=1)
+
+        self.assertEqual(result["items"][0]["thumbnail"], "https://example.com/image/thumb.jpg")
+        self.assertEqual(result["items"][0]["size_height"], "480")
+        self.assertEqual(result["items"][0]["size_width"], "640")
+
+    def test_normalize_search_response_shapes_book_items(self) -> None:
+        payload = {
+            "total": 1,
+            "start": 1,
+            "display": 5,
+            "items": [
+                {
+                    "title": "<b>파이썬</b> 입문",
+                    "link": "https://example.com/book",
+                    "image": "https://example.com/book.jpg",
+                    "author": "홍길동",
+                    "discount": "18000",
+                    "publisher": "테스트출판사",
+                    "isbn": "1234567890",
+                    "description": "기초부터 배우는 파이썬",
+                }
+            ],
+        }
+
+        result = normalize_search_response("파이썬", "book", payload, display=5, start=1)
+
+        self.assertEqual(result["items"][0]["author"], "홍길동")
+        self.assertEqual(result["items"][0]["publisher"], "테스트출판사")
+        self.assertEqual(result["items"][0]["isbn"], "1234567890")
+        self.assertEqual(result["items"][0]["description"], "기초부터 배우는 파이썬")
+
+    def test_normalize_search_response_shapes_shop_items(self) -> None:
+        payload = {
+            "total": 1,
+            "start": 1,
+            "display": 5,
+            "items": [
+                {
+                    "title": "<b>무선 이어폰</b>",
+                    "link": "https://example.com/shop",
+                    "image": "https://example.com/shop.jpg",
+                    "lprice": "99000",
+                    "hprice": "159000",
+                    "mallName": "테스트몰",
+                    "productId": "123456",
+                    "productType": "2",
+                    "brand": "테스트브랜드",
+                    "maker": "테스트메이커",
+                    "category1": "디지털/가전",
+                    "category2": "음향가전",
+                    "category3": "이어폰",
+                    "category4": "",
+                }
+            ],
+        }
+
+        result = normalize_search_response("이어폰", "shop", payload, display=5, start=1)
+
+        self.assertEqual(result["items"][0]["low_price"], "99000")
+        self.assertEqual(result["items"][0]["high_price"], "159000")
+        self.assertEqual(result["items"][0]["mall_name"], "테스트몰")
+        self.assertEqual(result["items"][0]["brand"], "테스트브랜드")
+
     def test_normalize_adult_query_response_parses_nested_item(self) -> None:
         payload = {"result": {"item": [{"adult": "1"}]}}
 

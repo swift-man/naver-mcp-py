@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Mapping, Optional, Protocol, Union
+import re
+from typing import Any, Callable, Mapping, Optional, Protocol
 
 from .cache import TTLCache
 from .config import NaverMCPConfig
 from .models import (
     BlogSearchRequest,
+    BookAdvancedSearchRequest,
+    BookSearchRequest,
     CafeArticleSearchRequest,
+    DocSearchRequest,
+    EncycSearchRequest,
+    ImageSearchRequest,
+    KinSearchRequest,
     LocalSearchRequest,
     NewsSearchRequest,
     QueryOnlyRequest,
+    ShopSearchRequest,
     WebSearchRequest,
 )
 from .normalize import (
@@ -19,13 +27,14 @@ from .normalize import (
     normalize_spell_check_response,
 )
 
-SearchRequest = Union[
-    LocalSearchRequest,
-    BlogSearchRequest,
-    WebSearchRequest,
-    NewsSearchRequest,
-    CafeArticleSearchRequest,
-]
+
+class SearchRequestProtocol(Protocol):
+    query: str
+    display: int
+    start: int
+
+    def to_params(self) -> dict[str, object]:
+        ...
 
 
 class SearchClientProtocol(Protocol):
@@ -45,6 +54,30 @@ class SearchClientProtocol(Protocol):
         self,
         request: CafeArticleSearchRequest,
     ) -> Mapping[str, Any]:
+        ...
+
+    def search_image(self, request: ImageSearchRequest) -> Mapping[str, Any]:
+        ...
+
+    def search_book(self, request: BookSearchRequest) -> Mapping[str, Any]:
+        ...
+
+    def search_book_advanced(
+        self,
+        request: BookAdvancedSearchRequest,
+    ) -> Mapping[str, Any]:
+        ...
+
+    def search_encyc(self, request: EncycSearchRequest) -> Mapping[str, Any]:
+        ...
+
+    def search_kin(self, request: KinSearchRequest) -> Mapping[str, Any]:
+        ...
+
+    def search_shop(self, request: ShopSearchRequest) -> Mapping[str, Any]:
+        ...
+
+    def search_doc(self, request: DocSearchRequest) -> Mapping[str, Any]:
         ...
 
     def spell_check(self, request: QueryOnlyRequest) -> Mapping[str, Any]:
@@ -87,6 +120,9 @@ class SearchTools:
         "꿀팁",
         "경험담",
     )
+    BOOK_HINTS = ("책", "도서", "서적", "isbn", "작가", "출판사")
+    SHOP_HINTS = ("최저가", "가격", "구매", "할인", "쇼핑", "상품", "판매")
+    ISBN_RE = re.compile(r"(97[89][-\s]?)?\d{9,13}")
 
     def __init__(
         self,
@@ -163,6 +199,111 @@ class SearchTools:
             self.client.search_cafearticle,
         )
 
+    def search_image(
+        self,
+        *,
+        query: str,
+        display: int = 5,
+        start: int = 1,
+        sort: str = "sim",
+        filter: str = "all",
+    ) -> dict[str, Any]:
+        request = ImageSearchRequest(
+            query=query,
+            display=display,
+            start=start,
+            sort=sort,
+            filter=filter,
+        )
+        return self._run_search("search_image", "image", request, self.client.search_image)
+
+    def search_book(
+        self,
+        *,
+        query: str,
+        display: int = 5,
+        start: int = 1,
+        sort: str = "sim",
+    ) -> dict[str, Any]:
+        request = BookSearchRequest(query=query, display=display, start=start, sort=sort)
+        return self._run_search("search_book", "book", request, self.client.search_book)
+
+    def search_book_advanced(
+        self,
+        *,
+        query: str = "",
+        display: int = 5,
+        start: int = 1,
+        sort: str = "sim",
+        title: str = "",
+        isbn: str = "",
+    ) -> dict[str, Any]:
+        request = BookAdvancedSearchRequest(
+            query=query,
+            display=display,
+            start=start,
+            sort=sort,
+            title=title,
+            isbn=isbn,
+        )
+        return self._run_search(
+            "search_book_advanced",
+            "book",
+            request,
+            self.client.search_book_advanced,
+        )
+
+    def search_encyc(
+        self,
+        *,
+        query: str,
+        display: int = 5,
+        start: int = 1,
+    ) -> dict[str, Any]:
+        request = EncycSearchRequest(query=query, display=display, start=start)
+        return self._run_search("search_encyc", "encyc", request, self.client.search_encyc)
+
+    def search_kin(
+        self,
+        *,
+        query: str,
+        display: int = 5,
+        start: int = 1,
+        sort: str = "sim",
+    ) -> dict[str, Any]:
+        request = KinSearchRequest(query=query, display=display, start=start, sort=sort)
+        return self._run_search("search_kin", "kin", request, self.client.search_kin)
+
+    def search_shop(
+        self,
+        *,
+        query: str,
+        display: int = 5,
+        start: int = 1,
+        sort: str = "sim",
+        filter: str = "",
+        exclude: str = "",
+    ) -> dict[str, Any]:
+        request = ShopSearchRequest(
+            query=query,
+            display=display,
+            start=start,
+            sort=sort,
+            filter=filter,
+            exclude=exclude,
+        )
+        return self._run_search("search_shop", "shop", request, self.client.search_shop)
+
+    def search_doc(
+        self,
+        *,
+        query: str,
+        display: int = 5,
+        start: int = 1,
+    ) -> dict[str, Any]:
+        request = DocSearchRequest(query=query, display=display, start=start)
+        return self._run_search("search_doc", "doc", request, self.client.search_doc)
+
     def spell_check(self, *, query: str) -> dict[str, Any]:
         request = QueryOnlyRequest(query=query)
         return self._run_query_only_tool(
@@ -221,7 +362,7 @@ class SearchTools:
         self,
         tool_name: str,
         source: str,
-        request: SearchRequest,
+        request: SearchRequestProtocol,
         client_method: Callable[[Any], Mapping[str, Any]],
     ) -> dict[str, Any]:
         cache_key = self._build_cache_key(tool_name, request.to_params())
@@ -265,6 +406,10 @@ class SearchTools:
         lowered = query.lower()
         if any(keyword in lowered for keyword in self.NEWS_HINTS):
             return "news_search"
+        if any(keyword in lowered for keyword in self.BOOK_HINTS) or self.ISBN_RE.search(query):
+            return "book_search"
+        if any(keyword in lowered for keyword in self.SHOP_HINTS):
+            return "shopping_search"
         if "카페글" in lowered or "네이버카페" in lowered or "cafearticle" in lowered:
             return "community_search"
         if any(keyword in lowered for keyword in self.PLACE_HINTS):
@@ -312,6 +457,39 @@ class SearchTools:
                         sort="date",
                     ),
                 }
+            ]
+        if intent == "book_search":
+            return [
+                {
+                    "source": "book",
+                    "call": lambda: self.search_book(
+                        query=query,
+                        display=display,
+                        start=1,
+                        sort="sim",
+                    ),
+                }
+            ]
+        if intent == "shopping_search":
+            return [
+                {
+                    "source": "shop",
+                    "call": lambda: self.search_shop(
+                        query=query,
+                        display=display,
+                        start=1,
+                        sort="sim",
+                    ),
+                },
+                {
+                    "source": "blog",
+                    "call": lambda: self.search_blog(
+                        query=query,
+                        display=display,
+                        start=1,
+                        sort="sim",
+                    ),
+                },
             ]
         if intent == "community_search":
             return [

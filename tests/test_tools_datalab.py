@@ -14,8 +14,10 @@ from naver_mcp.cache import TTLCache
 from naver_mcp.errors import ValidationError
 from naver_mcp.models import (
     DataLabSearchTrendsRequest,
+    DataLabShoppingCategoryDetailRequest,
     DataLabShoppingCategoryTrendsRequest,
-    DataLabShoppingDeviceTrendsRequest,
+    DataLabShoppingKeywordDetailRequest,
+    DataLabShoppingKeywordTrendsRequest,
 )
 from naver_mcp.tools_datalab import DataLabTools
 
@@ -25,7 +27,13 @@ class FakeDataLabClient:
         self.calls = {
             "search_trends": 0,
             "shopping_category": 0,
-            "shopping_device": 0,
+            "shopping_category_device": 0,
+            "shopping_category_gender": 0,
+            "shopping_category_age": 0,
+            "shopping_keyword": 0,
+            "shopping_keyword_device": 0,
+            "shopping_keyword_gender": 0,
+            "shopping_keyword_age": 0,
         }
 
     def datalab_search_trends(
@@ -64,11 +72,11 @@ class FakeDataLabClient:
             ],
         }
 
-    def datalab_shopping_device_trends(
+    def datalab_shopping_category_device_trends(
         self,
-        request: DataLabShoppingDeviceTrendsRequest,
+        request: DataLabShoppingCategoryDetailRequest,
     ) -> Mapping[str, Any]:
-        self.calls["shopping_device"] += 1
+        self.calls["shopping_category_device"] += 1
         return {
             "startDate": request.start_date,
             "endDate": request.end_date,
@@ -80,6 +88,133 @@ class FakeDataLabClient:
                     "data": [
                         {"period": "2026-03-01", "group": "mo", "ratio": 81.1},
                         {"period": "2026-03-01", "group": "pc", "ratio": 18.9},
+                    ],
+                }
+            ],
+        }
+
+    def datalab_shopping_category_gender_trends(
+        self,
+        request: DataLabShoppingCategoryDetailRequest,
+    ) -> Mapping[str, Any]:
+        self.calls["shopping_category_gender"] += 1
+        return {
+            "startDate": request.start_date,
+            "endDate": request.end_date,
+            "timeUnit": request.time_unit,
+            "results": [
+                {
+                    "title": request.category,
+                    "category": [request.category],
+                    "data": [
+                        {"period": "2026-03-01", "group": "f", "ratio": 61.4},
+                        {"period": "2026-03-01", "group": "m", "ratio": 38.6},
+                    ],
+                }
+            ],
+        }
+
+    def datalab_shopping_category_age_trends(
+        self,
+        request: DataLabShoppingCategoryDetailRequest,
+    ) -> Mapping[str, Any]:
+        self.calls["shopping_category_age"] += 1
+        return {
+            "startDate": request.start_date,
+            "endDate": request.end_date,
+            "timeUnit": request.time_unit,
+            "results": [
+                {
+                    "title": request.category,
+                    "category": [request.category],
+                    "data": [
+                        {"period": "2026-03-01", "group": "20", "ratio": 41.7},
+                        {"period": "2026-03-01", "group": "30", "ratio": 58.3},
+                    ],
+                }
+            ],
+        }
+
+    def datalab_shopping_keyword_trends(
+        self,
+        request: DataLabShoppingKeywordTrendsRequest,
+    ) -> Mapping[str, Any]:
+        self.calls["shopping_keyword"] += 1
+        return {
+            "startDate": request.start_date,
+            "endDate": request.end_date,
+            "timeUnit": request.time_unit,
+            "results": [
+                {
+                    "title": request.keywords[0].name,
+                    "category": [request.category],
+                    "keywords": request.keywords[0].params,
+                    "data": [{"period": "2026-03-01", "ratio": 44.8}],
+                }
+            ],
+        }
+
+    def datalab_shopping_keyword_device_trends(
+        self,
+        request: DataLabShoppingKeywordDetailRequest,
+    ) -> Mapping[str, Any]:
+        self.calls["shopping_keyword_device"] += 1
+        return {
+            "startDate": request.start_date,
+            "endDate": request.end_date,
+            "timeUnit": request.time_unit,
+            "results": [
+                {
+                    "title": request.keyword,
+                    "category": [request.category],
+                    "keyword": request.keyword,
+                    "data": [
+                        {"period": "2026-03-01", "group": "mo", "ratio": 73.0},
+                        {"period": "2026-03-01", "group": "pc", "ratio": 27.0},
+                    ],
+                }
+            ],
+        }
+
+    def datalab_shopping_keyword_gender_trends(
+        self,
+        request: DataLabShoppingKeywordDetailRequest,
+    ) -> Mapping[str, Any]:
+        self.calls["shopping_keyword_gender"] += 1
+        return {
+            "startDate": request.start_date,
+            "endDate": request.end_date,
+            "timeUnit": request.time_unit,
+            "results": [
+                {
+                    "title": request.keyword,
+                    "category": [request.category],
+                    "keyword": request.keyword,
+                    "data": [
+                        {"period": "2026-03-01", "group": "f", "ratio": 66.6},
+                        {"period": "2026-03-01", "group": "m", "ratio": 33.4},
+                    ],
+                }
+            ],
+        }
+
+    def datalab_shopping_keyword_age_trends(
+        self,
+        request: DataLabShoppingKeywordDetailRequest,
+    ) -> Mapping[str, Any]:
+        self.calls["shopping_keyword_age"] += 1
+        return {
+            "startDate": request.start_date,
+            "endDate": request.end_date,
+            "timeUnit": request.time_unit,
+            "results": [
+                {
+                    "title": request.keyword,
+                    "category": [request.category],
+                    "keyword": request.keyword,
+                    "data": [
+                        {"period": "2026-03-01", "group": "20", "ratio": 47.5},
+                        {"period": "2026-03-01", "group": "30", "ratio": 52.5},
                     ],
                 }
             ],
@@ -124,8 +259,8 @@ class DataLabToolsTest(unittest.TestCase):
         self.assertEqual(result["results"][0]["category"], ["50000000"])
         self.assertEqual(result["results"][0]["data"][0]["ratio"], 51.2)
 
-    def test_datalab_shopping_device_trends_returns_grouped_points(self) -> None:
-        result = self.tools.datalab_shopping_device_trends(
+    def test_datalab_shopping_category_device_trends_returns_grouped_points(self) -> None:
+        result = self.tools.datalab_shopping_category_device_trends(
             start_date="2026-03-01",
             end_date="2026-03-18",
             time_unit="date",
@@ -137,6 +272,92 @@ class DataLabToolsTest(unittest.TestCase):
         self.assertEqual(result["results"][0]["title"], "50000000")
         self.assertEqual(result["results"][0]["data"][0]["group"], "mo")
         self.assertEqual(result["results"][0]["data"][1]["group"], "pc")
+
+    def test_datalab_shopping_category_gender_trends_returns_gender_groups(self) -> None:
+        result = self.tools.datalab_shopping_category_gender_trends(
+            start_date="2026-03-01",
+            end_date="2026-03-18",
+            time_unit="date",
+            category="50000000",
+            device="mo",
+        )
+
+        self.assertEqual(result["results"][0]["category"], ["50000000"])
+        self.assertEqual(result["results"][0]["data"][0]["group"], "f")
+        self.assertEqual(result["results"][0]["data"][1]["group"], "m")
+
+    def test_datalab_shopping_category_age_trends_returns_age_groups(self) -> None:
+        result = self.tools.datalab_shopping_category_age_trends(
+            start_date="2026-03-01",
+            end_date="2026-03-18",
+            time_unit="date",
+            category="50000000",
+            gender="f",
+        )
+
+        self.assertEqual(result["results"][0]["data"][0]["group"], "20")
+        self.assertEqual(result["results"][0]["data"][1]["group"], "30")
+
+    def test_datalab_shopping_keyword_trends_returns_keywords(self) -> None:
+        result = self.tools.datalab_shopping_keyword_trends(
+            start_date="2026-03-01",
+            end_date="2026-03-18",
+            time_unit="week",
+            category="50000000",
+            keywords=[{"name": "러닝화", "params": ["러닝화"]}],
+            device="pc",
+        )
+
+        self.assertEqual(result["results"][0]["title"], "러닝화")
+        self.assertEqual(result["results"][0]["keywords"], ["러닝화"])
+        self.assertEqual(result["results"][0]["category"], ["50000000"])
+
+    def test_datalab_shopping_keyword_device_trends_returns_keyword_meta(self) -> None:
+        result = self.tools.datalab_shopping_keyword_device_trends(
+            start_date="2026-03-01",
+            end_date="2026-03-18",
+            time_unit="date",
+            category="50000000",
+            keyword="러닝화",
+        )
+
+        self.assertEqual(result["results"][0]["keywords"], ["러닝화"])
+        self.assertEqual(result["results"][0]["data"][0]["group"], "mo")
+
+    def test_datalab_shopping_keyword_gender_trends_returns_gender_groups(self) -> None:
+        result = self.tools.datalab_shopping_keyword_gender_trends(
+            start_date="2026-03-01",
+            end_date="2026-03-18",
+            time_unit="date",
+            category="50000000",
+            keyword="러닝화",
+        )
+
+        self.assertEqual(result["results"][0]["data"][0]["group"], "f")
+        self.assertEqual(result["results"][0]["data"][1]["group"], "m")
+
+    def test_datalab_shopping_keyword_age_trends_returns_age_groups(self) -> None:
+        result = self.tools.datalab_shopping_keyword_age_trends(
+            start_date="2026-03-01",
+            end_date="2026-03-18",
+            time_unit="date",
+            category="50000000",
+            keyword="러닝화",
+        )
+
+        self.assertEqual(result["results"][0]["data"][0]["group"], "20")
+        self.assertEqual(result["results"][0]["data"][1]["group"], "30")
+
+    def test_datalab_shopping_device_trends_keeps_backward_compatible_alias(self) -> None:
+        result = self.tools.datalab_shopping_device_trends(
+            start_date="2026-03-01",
+            end_date="2026-03-18",
+            time_unit="date",
+            category="50000000",
+        )
+
+        self.assertEqual(result["results"][0]["title"], "50000000")
+        self.assertEqual(self.client.calls["shopping_category_device"], 1)
 
     def test_datalab_search_trends_validates_keyword_groups(self) -> None:
         with self.assertRaises(ValidationError):
@@ -155,6 +376,26 @@ class DataLabToolsTest(unittest.TestCase):
                 time_unit="date",
                 categories=[{"name": "패션의류", "params": ["50000000"]}],
                 device="tablet",
+            )
+
+    def test_datalab_shopping_keyword_trends_validates_keywords(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.tools.datalab_shopping_keyword_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                category="50000000",
+                keywords=[],
+            )
+
+    def test_datalab_shopping_keyword_device_trends_validates_keyword(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.tools.datalab_shopping_keyword_device_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                category="50000000",
+                keyword="   ",
             )
 
     def test_datalab_search_trends_uses_cache(self) -> None:
