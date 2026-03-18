@@ -20,6 +20,7 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
             "fastmcp is not installed. Install the optional 'server' dependency first."
         )
 
+    # 서버는 요청 객체 생성과 도구 등록만 맡고, 실제 비즈니스 로직은 tools 계층으로 위임한다.
     resolved_config = config or NaverMCPConfig.from_env()
     client = NaverClient(resolved_config)
     search_tools = SearchTools(
@@ -168,6 +169,7 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
 
 
 def healthz() -> dict[str, str]:
+    # 별도 HTTP 래퍼를 둘 때 재사용할 수 있는 가장 단순한 헬스 체크 응답이다.
     return {"status": "ok"}
 
 

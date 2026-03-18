@@ -76,6 +76,13 @@ naver-mcp-py/
     test_tools_search.py
 ```
 
+## Requirements
+
+- Python 3.9+
+- Naver Search API credentials
+- Naver DataLab API access
+- Linux server only if you plan to run it as a long-lived service
+
 ## Quick Start
 
 ### 1. Create a virtual environment
@@ -117,6 +124,19 @@ Available environment variables:
 You can use `.env.example` as a template, but the current code does not auto-load `.env`.
 On Linux servers, export the variables explicitly or load them through your process manager such as `systemd`.
 
+Example:
+
+```bash
+export NAVER_CLIENT_ID="your_client_id"
+export NAVER_CLIENT_SECRET="your_client_secret"
+export NAVER_MCP_HOST="127.0.0.1"
+export NAVER_MCP_PORT="8100"
+export NAVER_MCP_PATH="/mcp"
+export NAVER_MCP_TRANSPORT="streamable-http"
+export NAVER_HTTP_TIMEOUT_SEC="8.0"
+export NAVER_CACHE_TTL_SEC="300"
+```
+
 ### 4. Run the MCP server
 
 ```bash
@@ -129,13 +149,208 @@ Default MCP endpoint:
 
 `healthz()` is also exposed as a plain Python helper for embedding or wrapper HTTP apps.
 
-## Linux Deployment Note
+## Manual Run On Linux
+
+If you are running the server by hand on a Linux machine:
+
+```bash
+cd /path/to/naver-mcp-py
+python3 -m venv .venv
+.venv/bin/pip install -U pip
+.venv/bin/pip install -e ".[server]"
+
+export NAVER_CLIENT_ID="your_client_id"
+export NAVER_CLIENT_SECRET="your_client_secret"
+export NAVER_MCP_HOST="127.0.0.1"
+export NAVER_MCP_PORT="8100"
+export NAVER_MCP_PATH="/mcp"
+export NAVER_MCP_TRANSPORT="streamable-http"
+export NAVER_HTTP_TIMEOUT_SEC="8.0"
+export NAVER_CACHE_TTL_SEC="300"
+
+.venv/bin/python -m naver_mcp.server
+```
+
+If an MCP client runs on a different machine and must connect over the LAN:
+
+- set `NAVER_MCP_HOST=0.0.0.0`
+- open the port in your firewall if needed
+- make sure the client uses the same path as `NAVER_MCP_PATH`
+
+For example, if the client connects to `http://192.168.1.218:8100/naver_mcp`, then your environment must include:
+
+```bash
+export NAVER_MCP_HOST="0.0.0.0"
+export NAVER_MCP_PATH="/naver_mcp"
+```
+
+## Linux Server Deployment With systemd
 
 Recommended production pattern:
 
 1. Keep the service bound to `127.0.0.1`.
 2. Load secrets through `systemd EnvironmentFile` or another secret manager.
 3. Put `nginx` or another reverse proxy in front if external access is needed.
+
+Example deployment directory:
+
+```bash
+/home/<USER>/naver-mcp-py
+```
+
+### 1. Prepare the project
+
+```bash
+cd /home/<USER>/naver-mcp-py
+python3 -m venv .venv
+.venv/bin/pip install -U pip
+.venv/bin/pip install -e ".[server]"
+```
+
+### 2. Create the environment file
+
+Create `/etc/naver-mcp.env`:
+
+```bash
+sudo tee /etc/naver-mcp.env > /dev/null <<'EOF'
+NAVER_CLIENT_ID=your_client_id
+NAVER_CLIENT_SECRET=your_client_secret
+NAVER_MCP_HOST=127.0.0.1
+NAVER_MCP_PORT=8100
+NAVER_MCP_PATH=/mcp
+NAVER_MCP_TRANSPORT=streamable-http
+NAVER_HTTP_TIMEOUT_SEC=8.0
+NAVER_CACHE_TTL_SEC=300
+EOF
+```
+
+If your MCP client connects over the network directly, update these two values:
+
+```bash
+NAVER_MCP_HOST=0.0.0.0
+NAVER_MCP_PATH=/naver_mcp
+```
+
+The client URL must exactly match the path you configure here.
+
+### 3. Create the systemd unit
+
+Create `/etc/systemd/system/naver-mcp.service`:
+
+```ini
+[Unit]
+Description=Naver MCP Python Server
+After=network.target
+
+[Service]
+Type=simple
+User=<USER>
+WorkingDirectory=/home/<USER>/naver-mcp-py
+EnvironmentFile=/etc/naver-mcp.env
+ExecStart=/home/<USER>/naver-mcp-py/.venv/bin/python -m naver_mcp.server
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Notes:
+
+- `User` must be a real Linux user
+- `WorkingDirectory` must match the actual repository path
+- `ExecStart` must point to the actual virtualenv Python
+- in most cases you do not need a `Group=` line
+
+### 4. Start the service
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now naver-mcp
+sudo systemctl status naver-mcp --no-pager
+```
+
+### 5. Check logs and listening port
+
+```bash
+journalctl -u naver-mcp -f
+ss -ltnp | grep 8100
+```
+
+## MCP Client URL
+
+The client URL must match both the host, port, and path from your environment.
+
+Examples:
+
+- default local setup: `http://127.0.0.1:8100/mcp`
+- LAN exposure with custom path: `http://192.168.1.218:8100/naver_mcp`
+
+If the client uses `/naver_mcp` but the server is configured with `/mcp`, requests will fail even if the process is running.
+
+## Troubleshooting
+
+### `ECONNREFUSED`
+
+This usually means nothing is listening on that IP and port.
+
+Check:
+
+```bash
+sudo systemctl status naver-mcp --no-pager
+ss -ltnp | grep 8100
+```
+
+Common causes:
+
+- service is not running
+- `NAVER_MCP_HOST` is `127.0.0.1` but you are connecting from another machine
+- firewall is blocking the port
+
+### `status=203/EXEC`
+
+This means `ExecStart` points to a missing or non-executable path.
+
+Check:
+
+```bash
+ls -l /home/<USER>/naver-mcp-py/.venv/bin/python
+```
+
+### `status=216/GROUP`
+
+This usually means the `Group=` value in the systemd unit is invalid.
+
+Fix:
+
+- remove the `Group=` line, or
+- change it to a real group from `id <USER>`
+
+### Wrong MCP path
+
+If the client connects to:
+
+```text
+http://SERVER_IP:8100/naver_mcp
+```
+
+then you must configure:
+
+```bash
+NAVER_MCP_PATH=/naver_mcp
+```
+
+If you keep the default:
+
+```bash
+NAVER_MCP_PATH=/mcp
+```
+
+then the client must use:
+
+```text
+http://SERVER_IP:8100/mcp
+```
 
 ## Design Principles
 

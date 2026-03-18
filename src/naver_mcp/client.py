@@ -113,6 +113,7 @@ class NaverClient:
         params: Optional[Mapping[str, object]] = None,
         payload: Optional[Mapping[str, object]] = None,
     ) -> Mapping[str, Any]:
+        # 검색 계열과 DataLab 계열을 같은 공통 HTTP 진입점으로 묶어 둔다.
         url = self._build_url(endpoint, params=params)
         body = None if payload is None else json.dumps(payload).encode("utf-8")
         headers = self._build_headers()
@@ -129,6 +130,7 @@ class NaverClient:
                     self.config.http_timeout_sec,
                 )
             except NaverTimeoutError:
+                # timeout만 짧게 재시도하고, 그 외 에러는 바로 상위로 올린다.
                 if attempt >= self._max_retries:
                     raise
                 self._sleep_fn(min(0.2 * attempt, 1.0))
@@ -136,6 +138,7 @@ class NaverClient:
         raise NaverAPIError("Naver API request failed")
 
     def _build_headers(self) -> dict[str, str]:
+        # 인증값이 없으면 여기서 즉시 실패시켜, 네트워크 호출 전에 문제를 드러낸다.
         self.config.require_credentials()
         return {
             "Accept": "application/json",
@@ -164,6 +167,7 @@ class NaverClient:
         body: Optional[bytes],
         timeout: float,
     ) -> Mapping[str, Any]:
+        # 표준 라이브러리만으로도 리눅스 서버 배포가 가능하도록 urllib 기반으로 구현한다.
         request = urllib.request.Request(
             url=url,
             headers=dict(headers),
@@ -192,6 +196,7 @@ class NaverClient:
         return parsed
 
     def _raise_for_http_error(self, status_code: int, body: str) -> None:
+        # 상위 계층이 안정적으로 처리할 수 있도록 HTTP 상태를 내부 에러 코드로 매핑한다.
         message = body.strip() or f"Naver API request failed with status {status_code}"
         if status_code in {401, 403}:
             raise NaverAuthError(message, status_code=status_code)

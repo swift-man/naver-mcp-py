@@ -56,6 +56,7 @@ class SearchClientProtocol(Protocol):
 
 class SearchTools:
     AUXILIARY_CACHE_TTL_SEC = 1800
+    # 자동 라우팅은 복잡한 NLP 대신, 설명 가능한 힌트 기반 규칙으로 유지한다.
     PLACE_HINTS = (
         "맛집",
         "식당",
@@ -186,6 +187,7 @@ class SearchTools:
         query: str,
         display: int = 5,
     ) -> dict[str, Any]:
+        # 편의 도구도 내부적으로는 검증 로직을 재사용하기 위해 WebSearchRequest 형태로 받는다.
         request = WebSearchRequest(query=query, display=display, start=1)
         cache_key = self._build_cache_key("search_naver_auto", request.to_params())
         cached = self.cache.get(cache_key)
@@ -259,6 +261,7 @@ class SearchTools:
         return normalized
 
     def _detect_auto_intent(self, query: str) -> str:
+        # 어떤 규칙에 걸렸는지 추론 가능해야 하므로 단순한 우선순위 규칙으로 intent를 정한다.
         lowered = query.lower()
         if any(keyword in lowered for keyword in self.NEWS_HINTS):
             return "news_search"
@@ -276,6 +279,7 @@ class SearchTools:
         query: str,
         display: int,
     ) -> list[dict[str, Any]]:
+        # 검색 조합과 정렬 기준을 여기 한곳에 모아 두면 계약 문서와 코드 동기화가 쉽다.
         if intent == "place_search":
             return [
                 {
@@ -363,6 +367,7 @@ class SearchTools:
                     continue
                 seen.add(dedupe_key)
                 normalized_item = dict(item)
+                # source 우선순위가 높을수록 더 큰 score를 주어 병합 결과를 결정적으로 만든다.
                 normalized_item["score"] = float((total_sources - source_index) * 1000 - item_index)
                 merged.append(normalized_item)
 
@@ -372,6 +377,7 @@ class SearchTools:
     def _build_item_dedupe_key(item: Mapping[str, Any]) -> str:
         originallink = str(item.get("originallink") or "").strip().lower()
         if originallink:
+            # 외부 원문 링크가 있으면 가장 안정적인 중복 판별 기준으로 사용한다.
             return originallink
 
         link = str(item.get("link") or "").strip().lower()

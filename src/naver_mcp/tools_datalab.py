@@ -59,6 +59,7 @@ class DataLabTools:
         time_unit: str,
         keyword_groups: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        # 외부 입력은 dict로 받고, 내부에서는 검증 가능한 요청 모델로 즉시 변환한다.
         groups = [
             DataLabKeywordGroup(
                 group_name=str(group.get("group_name") or group.get("groupName") or ""),
@@ -90,6 +91,7 @@ class DataLabTools:
         gender: str = "",
         ages: Optional[list[str]] = None,
     ) -> dict[str, Any]:
+        # category/param 이름 차이를 여기서 흡수해 MCP 입력 형태를 단순하게 유지한다.
         category_groups = [
             DataLabCategoryGroup(
                 name=str(group.get("name") or ""),
@@ -147,6 +149,7 @@ class DataLabTools:
         client_call: Callable[[], Mapping[str, Any]],
         normalizer: Callable[..., dict[str, Any]],
     ) -> dict[str, Any]:
+        # DataLab은 비교적 갱신 주기가 길어 캐시 효율이 높으므로 공통 진입점에서 캐시를 관리한다.
         cache_key = self._build_cache_key(tool_name, payload)
         cached = self.cache.get(cache_key)
         if cached is not None:

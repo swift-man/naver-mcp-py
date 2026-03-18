@@ -15,6 +15,7 @@ _WHITESPACE_RE = re.compile(r"\s+")
 def strip_html(value: Any) -> str:
     if value is None:
         return ""
+    # Naver 응답은 <b> 강조 태그가 자주 섞여 있으므로 공통 전처리로 제거한다.
     text = html.unescape(str(value))
     text = _HTML_TAG_RE.sub(" ", text)
     return _WHITESPACE_RE.sub(" ", text).strip()
@@ -25,6 +26,7 @@ def normalize_published_at(value: Any) -> Optional[str]:
     if not text:
         return None
 
+    # 뉴스 pubDate 같은 RFC822 형식을 먼저 처리한다.
     try:
         parsed = parsedate_to_datetime(text)
     except (TypeError, ValueError, IndexError):
@@ -34,6 +36,7 @@ def normalize_published_at(value: Any) -> Optional[str]:
             parsed = parsed.replace(tzinfo=KST)
         return parsed.isoformat()
 
+    # 블로그 postdate 같은 숫자형 날짜 포맷도 순서대로 흡수한다.
     for fmt in ("%Y%m%d%H%M%S", "%Y%m%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
         try:
             parsed = datetime.strptime(text, fmt)
@@ -58,6 +61,7 @@ def normalize_search_item(source: str, item: Mapping[str, Any]) -> dict[str, Any
     }
 
     if source == "local":
+        # 지역 검색은 공통 필드 외에도 지도/주소 계열 필드를 유지해 주는 편이 활용도가 높다.
         normalized.update(
             {
                 "name": title,
@@ -180,6 +184,7 @@ def normalize_datalab_device_trends_response(
 
 
 def _extract_single_value(payload: Mapping[str, Any], field_name: str) -> str:
+    # errata/adult 응답은 배포 환경에 따라 필드 중첩 형태가 달라질 수 있어 여러 경로를 순차 탐색한다.
     direct = payload.get(field_name)
     if direct is not None:
         return str(direct)
@@ -224,6 +229,7 @@ def _normalize_datalab_response(
     *,
     cached: bool,
 ) -> dict[str, Any]:
+    # DataLab 계열은 결과 구조가 유사하므로 공통 normalizer에서 메타까지 함께 맞춘다.
     raw_results = payload.get("results", [])
     results: list[dict[str, Any]] = []
     for result in raw_results:
@@ -243,6 +249,7 @@ def _normalize_datalab_response(
                 "ratio": ratio_value,
             }
             group = point.get("group")
+            # 기기 트렌드처럼 group이 있는 경우에만 보존한다.
             if group is not None and str(group).strip():
                 normalized_point["group"] = str(group)
             data_points.append(normalized_point)
