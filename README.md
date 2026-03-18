@@ -54,11 +54,12 @@ DataLab tools:
 naver-mcp-py/
   README.md
   AGENTS.md
-  ARCHITECTURE.md
-  TOOL_CONTRACT.md
   pyproject.toml
   .env.example
   sitecustomize.py
+  docs/
+    ARCHITECTURE.md
+    TOOL_CONTRACT.md
   src/naver_mcp/
     __init__.py
     cache.py
@@ -123,6 +124,12 @@ Available environment variables:
 
 You can use `.env.example` as a template, but the current code does not auto-load `.env`.
 On Linux servers, export the variables explicitly or load them through your process manager such as `systemd`.
+
+Security note:
+
+- never commit real `NAVER_CLIENT_ID` or `NAVER_CLIENT_SECRET`
+- keep real credentials only in private shell exports, `.env` files excluded by `.gitignore`, or `/etc/naver-mcp.env`
+- if a real key was ever pushed to a public repository, rotate it immediately in the Naver developer console
 
 Example:
 
@@ -223,6 +230,8 @@ NAVER_HTTP_TIMEOUT_SEC=8.0
 NAVER_CACHE_TTL_SEC=300
 EOF
 ```
+
+This file should stay on the server only and must not be copied into the repository.
 
 If your MCP client connects over the network directly, update these two values:
 
@@ -384,6 +393,6 @@ The chat app is responsible for channel-specific rendering. This repository is r
 
 ## Documentation
 
-- Architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
-- Tool contract: [TOOL_CONTRACT.md](TOOL_CONTRACT.md)
+- Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Tool contract: [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md)
 - Agent guidance: [AGENTS.md](AGENTS.md)

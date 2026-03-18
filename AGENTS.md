@@ -64,7 +64,7 @@ Build a small, reliable, reusable MCP server that exposes Naver Search API and D
 
 ## When Extending the Repository
 
-- Update `TOOL_CONTRACT.md` before or with code changes.
+- Update `docs/TOOL_CONTRACT.md` before or with code changes.
 - Keep `README.md` aligned with actual startup commands.
 - Do not add chat-app assumptions into tool outputs.
 - If a new tool mixes multiple sources, document ranking and merge rules.
@@ -72,8 +72,7 @@ Build a small, reliable, reusable MCP server that exposes Naver Search API and D
 ## First Steps For A New Codex Session
 
 1. Read `README.md`.
-2. Read `ARCHITECTURE.md`.
-3. Read `TOOL_CONTRACT.md`.
+2. Read `docs/ARCHITECTURE.md`.
+3. Read `docs/TOOL_CONTRACT.md`.
 4. Inspect the current file tree and tests.
 5. Implement the smallest vertical slice first.
-
