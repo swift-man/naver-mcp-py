@@ -84,14 +84,18 @@ def _validate_time_unit(time_unit: str) -> str:
     return normalized
 
 
-def _validate_device(device: str) -> str:
+def _validate_device(device: object) -> str:
+    if not isinstance(device, str):
+        raise ValidationError("device must be a string")
     normalized = device.strip()
     if normalized not in VALID_DEVICE_FILTERS:
         raise ValidationError("device must be one of: '', pc, mo")
     return normalized
 
 
-def _validate_gender(gender: str) -> str:
+def _validate_gender(gender: object) -> str:
+    if not isinstance(gender, str):
+        raise ValidationError("gender must be a string")
     normalized = gender.strip()
     if normalized not in VALID_GENDERS:
         raise ValidationError("gender must be one of: '', m, f")

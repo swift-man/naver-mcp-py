@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import json
 import math
 import socket
@@ -248,7 +249,9 @@ class NaverClient:
             "search/v1/errata",
             "search/v1/adult",
         }:
-            items = payload.get("items", [])
+            if "items" not in payload:
+                raise NaverAPIError("Naver API response is missing search items")
+            items = payload["items"]
             if not isinstance(items, list):
                 raise NaverAPIError("Naver API returned invalid search items")
             for field_name in ("total", "start", "display"):
@@ -267,7 +270,9 @@ class NaverClient:
                     ) from exc
 
         if endpoint.startswith(("search-trend/v1/", "shopping/v1/")):
-            results = payload.get("results", [])
+            if "results" not in payload:
+                raise NaverAPIError("Naver API response is missing DataLab results")
+            results = payload["results"]
             if not isinstance(results, list):
                 raise NaverAPIError("Naver API returned invalid DataLab results")
             for result in results:
@@ -338,6 +343,9 @@ class NaverClient:
             if isinstance(exc.reason, socket.timeout) or "timed out" in str(exc.reason).lower():
                 raise NaverTimeoutError("Naver API request timed out") from exc
             raise NaverAPIError("Naver API request failed", retryable=True) from exc
+        except http.client.HTTPException as exc:
+            # 응답 본문 수신 중 연결이 끊긴 경우에도 상위 계층이 재시도할 수 있게 변환한다.
+            raise NaverAPIError("Naver API response was interrupted", retryable=True) from exc
         except TimeoutError as exc:
             raise NaverTimeoutError("Naver API request timed out") from exc
 

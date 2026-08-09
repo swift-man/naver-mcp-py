@@ -632,6 +632,7 @@ Input:
 - `device` must be one of `""`, `pc`, `mo`
 - `gender` must be one of `""`, `m`, `f`
 - `ages` must contain only `10`, `20`, `30`, `40`, `50`, `60`
+- NAVER API HUB documents `device`, `gender`, and `ages` as optional filters on all six category and keyword breakdown endpoints; supplied filters are forwarded unchanged
 - `ages`, group `keywords`, and group `params` must be JSON arrays of strings, not scalar strings
 
 ## Error Shape

@@ -561,6 +561,26 @@ class DataLabToolsTest(unittest.TestCase):
                 device="tablet",
             )
 
+    def test_datalab_shopping_filters_reject_non_string_values(self) -> None:
+        invalid_requests = [
+            {"device": None},
+            {"device": 1},
+            {"gender": None},
+            {"gender": 1},
+        ]
+
+        for invalid_filter in invalid_requests:
+            with self.subTest(invalid_filter=invalid_filter), self.assertRaises(
+                ValidationError
+            ):
+                DataLabShoppingCategoryDetailRequest(
+                    start_date="2026-03-01",
+                    end_date="2026-03-18",
+                    time_unit="date",
+                    category="50000000",
+                    **invalid_filter,  # type: ignore[arg-type]
+                )
+
     def test_datalab_shopping_keyword_trends_validates_keywords(self) -> None:
         with self.assertRaises(ValidationError):
             self.tools.datalab_shopping_keyword_trends(

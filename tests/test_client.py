@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import json
 import sys
 import unittest
@@ -65,6 +66,14 @@ class RecordingTransport:
                 "timeout": timeout,
             }
         )
+        path = urllib.parse.urlsplit(url).path
+        if path.startswith("/search/v1/") and path not in {
+            "/search/v1/errata",
+            "/search/v1/adult",
+        }:
+            return {"items": []}
+        if path.startswith(("/search-trend/v1/", "/shopping/v1/")):
+            return {"results": []}
         return {}
 
 
@@ -241,6 +250,43 @@ class NaverClientTest(unittest.TestCase):
         self.assertNotIn("gender", payload)
         self.assertNotIn("ages", payload)
 
+    def test_datalab_breakdown_requests_preserve_supported_filters(self) -> None:
+        category_request = DataLabShoppingCategoryDetailRequest(
+            start_date="2026-08-01",
+            end_date="2026-08-08",
+            time_unit="date",
+            category="50000000",
+            device="pc",
+            gender="f",
+            ages=["20", "30"],
+        )
+        keyword_request = DataLabShoppingKeywordDetailRequest(
+            start_date="2026-08-01",
+            end_date="2026-08-08",
+            time_unit="date",
+            category="50000000",
+            keyword="정장",
+            device="pc",
+            gender="f",
+            ages=["20", "30"],
+        )
+        calls = [
+            (self.client.datalab_shopping_category_device_trends, category_request),
+            (self.client.datalab_shopping_category_gender_trends, category_request),
+            (self.client.datalab_shopping_category_age_trends, category_request),
+            (self.client.datalab_shopping_keyword_device_trends, keyword_request),
+            (self.client.datalab_shopping_keyword_gender_trends, keyword_request),
+            (self.client.datalab_shopping_keyword_age_trends, keyword_request),
+        ]
+
+        for client_call, request in calls:
+            with self.subTest(client_call=client_call.__name__):
+                client_call(request)
+                payload = json.loads(self.transport.calls[-1]["body"].decode("utf-8"))
+                self.assertEqual(payload["device"], "pc")
+                self.assertEqual(payload["gender"], "f")
+                self.assertEqual(payload["ages"], ["20", "30"])
+
     def test_search_trend_filters_are_sent_when_configured(self) -> None:
         request = DataLabSearchTrendsRequest(
             start_date="2026-08-01",
@@ -308,7 +354,7 @@ class NaverClientTest(unittest.TestCase):
             calls += 1
             if calls == 1:
                 raise NaverAPIError("temporary server error", retryable=True)
-            return {}
+            return {"items": []}
 
         client = NaverClient(
             self.config,
@@ -337,7 +383,7 @@ class NaverClientTest(unittest.TestCase):
             calls += 1
             if calls == 1:
                 raise NaverAPIError("temporary server error", retryable=True)
-            return {}
+            return {"items": []}
 
         client = NaverClient(
             self.config,
@@ -352,6 +398,7 @@ class NaverClientTest(unittest.TestCase):
 
     def test_malformed_success_payload_is_rejected(self) -> None:
         payloads = [
+            {},
             {"items": None},
             {"items": [], "total": "not-a-number"},
         ]
@@ -373,6 +420,7 @@ class NaverClientTest(unittest.TestCase):
             keyword_groups=[DataLabKeywordGroup(group_name="파이썬", keywords=["파이썬"])],
         )
         payloads = [
+            {},
             {"results": [None]},
             {"results": [{"data": None}]},
             {"results": [{"data": [None]}]},
@@ -408,6 +456,33 @@ class NaverClientTest(unittest.TestCase):
             )
 
         self.assertEqual(payload["note"], "\ufffd")
+
+    def test_interrupted_http_responses_are_retryable_api_errors(self) -> None:
+        errors = [
+            http.client.IncompleteRead(b'{"items":', 1),
+            http.client.RemoteDisconnected("remote closed connection"),
+        ]
+
+        for error in errors:
+            with self.subTest(error=error):
+                response = mock.MagicMock()
+                response.__enter__.return_value = response
+                response.read.side_effect = error
+
+                with mock.patch(
+                    "naver_mcp.client.urllib.request.urlopen",
+                    return_value=response,
+                ):
+                    with self.assertRaises(NaverAPIError) as context:
+                        self.client._default_transport(
+                            "GET",
+                            "https://api.example.com/test",
+                            {},
+                            None,
+                            1.0,
+                        )
+
+                self.assertTrue(context.exception.is_retryable)
 
     def test_timeout_fails_fast_without_retry(self) -> None:
         calls = 0
