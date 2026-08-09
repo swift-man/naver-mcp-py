@@ -291,7 +291,7 @@ def _normalize_datalab_response(
             ratio = point.get("ratio")
             try:
                 ratio_value = float(ratio)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 ratio_value = 0.0
             normalized_point = {
                 "period": str(point.get("period") or ""),

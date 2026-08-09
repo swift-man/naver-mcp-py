@@ -31,4 +31,4 @@ All notable changes to this project are documented in this file.
 - Honor a zero Search API cache TTL for spell and adult-query tools, require groups in DataLab breakdown responses, and validate supported server transports before startup.
 - Preserve each element of NAVER API HUB shopping keyword arrays instead of stringifying the whole array into one metadata value.
 - Prevent one-character auto-search hints from matching inside unrelated Korean words, validate DataLab result metadata against the official array contracts, and reject cache TTL values above 365 days.
-- Preserve station-name suffix routing while excluding common non-place words, avoid checksum-valid phone numbers being mistaken for ISBN-10, and reject DataLab responses with invalid date metadata or unsupported breakdown group codes.
+- Preserve station-name suffix routing while excluding common non-place words, avoid checksum-valid phone numbers being mistaken for ISBN-10, reject DataLab responses with invalid date metadata or unsupported breakdown group codes, and handle ratio overflow consistently in direct normalizer use.

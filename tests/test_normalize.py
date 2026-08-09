@@ -219,6 +219,21 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual(result["meta"]["end_date"], "")
         self.assertEqual(result["meta"]["time_unit"], "")
 
+    def test_normalize_datalab_handles_ratio_float_overflow(self) -> None:
+        payload = {
+            "results": [
+                {
+                    "title": "파이썬",
+                    "keywords": ["파이썬"],
+                    "data": [{"period": "2026-08-01", "ratio": 10**400}],
+                }
+            ]
+        }
+
+        result = normalize_datalab_category_trends_response(payload)
+
+        self.assertEqual(result["results"][0]["data"][0]["ratio"], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
