@@ -164,7 +164,7 @@ Available environment variables:
 
 - `NAVER_API_HUB_CLIENT_ID`
 - `NAVER_API_HUB_CLIENT_SECRET`
-- `NAVER_API_BASE_URL` (optional; defaults to `https://naverapihub.apigw.ntruss.com`)
+- `NAVER_API_BASE_URL` (optional; defaults to `https://naverapihub.apigw.ntruss.com`; HTTPS required except for loopback testing)
 - `NAVER_MCP_HOST`
 - `NAVER_MCP_PORT`
 - `NAVER_MCP_PATH`
@@ -184,6 +184,7 @@ Security note:
 - keep real credentials only in private shell exports, `.env` files excluded by `.gitignore`, or `/etc/naver-mcp.env`
 - if a real key was ever pushed to a public repository, reissue it immediately in the NAVER Cloud Platform console
 - legacy `NAVER_CLIENT_ID` and `NAVER_CLIENT_SECRET` variable names remain accepted as aliases, but the values must be NAVER API HUB credentials
+- upstream `NAVER_API_BASE_URL` overrides must use HTTPS; plain HTTP is accepted only for explicit loopback hosts during local testing
 - HTTP binding to a non-loopback address is refused unless authenticated FastMCP or an explicitly protected trusted network is configured
 
 Example:

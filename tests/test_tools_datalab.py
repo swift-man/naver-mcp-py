@@ -405,6 +405,49 @@ class DataLabToolsTest(unittest.TestCase):
                         keyword_groups=keyword_groups,  # type: ignore[arg-type]
                     )
 
+    def test_shopping_category_request_rejects_invalid_group_types(self) -> None:
+        invalid_values = [
+            "category",
+            None,
+            {"name": "패션의류", "params": ["50000000"]},
+            ("category",),
+            iter(["category"]),
+            ["category"],
+            [{"name": "패션의류", "params": ["50000000"]}],
+        ]
+
+        for categories in invalid_values:
+            with self.subTest(categories=categories), self.assertRaises(
+                ValidationError
+            ):
+                DataLabShoppingCategoryTrendsRequest(
+                    start_date="2026-03-01",
+                    end_date="2026-03-18",
+                    time_unit="date",
+                    categories=categories,  # type: ignore[arg-type]
+                )
+
+    def test_shopping_keyword_request_rejects_invalid_group_types(self) -> None:
+        invalid_values = [
+            "keyword",
+            None,
+            {"name": "러닝화", "params": ["러닝화"]},
+            ("keyword",),
+            iter(["keyword"]),
+            ["keyword"],
+            [{"name": "러닝화", "params": ["러닝화"]}],
+        ]
+
+        for keywords in invalid_values:
+            with self.subTest(keywords=keywords), self.assertRaises(ValidationError):
+                DataLabShoppingKeywordTrendsRequest(
+                    start_date="2026-03-01",
+                    end_date="2026-03-18",
+                    time_unit="date",
+                    category="50000000",
+                    keywords=keywords,  # type: ignore[arg-type]
+                )
+
     def test_datalab_search_trends_validates_api_hub_age_codes(self) -> None:
         with self.assertRaises(ValidationError):
             self.tools.datalab_search_trends(

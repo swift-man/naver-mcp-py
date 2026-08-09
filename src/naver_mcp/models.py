@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -170,7 +170,7 @@ def _normalize_str_list(values: Iterable[object], field_name: str) -> list[str]:
 
 
 def _validate_list_input(values: object, field_name: str) -> None:
-    if isinstance(values, (str, bytes, Mapping)) or not isinstance(values, Iterable):
+    if not isinstance(values, list):
         raise ValidationError(f"{field_name} must be a list")
 
 
@@ -484,10 +484,18 @@ class DataLabShoppingCategoryTrendsRequest:
         object.__setattr__(self, "start_date", start_date)
         object.__setattr__(self, "end_date", end_date)
         object.__setattr__(self, "time_unit", _validate_time_unit(self.time_unit))
+        _validate_list_input(self.categories, "categories")
         if not self.categories:
             raise ValidationError("categories must not be empty")
         if len(self.categories) > 3:
             raise ValidationError("categories must contain at most 3 groups")
+        if any(
+            not isinstance(category, DataLabCategoryGroup)
+            for category in self.categories
+        ):
+            raise ValidationError(
+                "categories must contain only DataLabCategoryGroup values"
+            )
         object.__setattr__(self, "device", _validate_device(self.device))
         object.__setattr__(self, "gender", _validate_gender(self.gender))
         object.__setattr__(self, "ages", _validate_ages(self.ages))
@@ -559,10 +567,18 @@ class DataLabShoppingKeywordTrendsRequest:
         object.__setattr__(self, "end_date", end_date)
         object.__setattr__(self, "time_unit", _validate_time_unit(self.time_unit))
         object.__setattr__(self, "category", _validate_non_empty(self.category, "category"))
+        _validate_list_input(self.keywords, "keywords")
         if not self.keywords:
             raise ValidationError("keywords must not be empty")
         if len(self.keywords) > 5:
             raise ValidationError("keywords must contain at most 5 groups")
+        if any(
+            not isinstance(keyword, DataLabShoppingKeywordGroup)
+            for keyword in self.keywords
+        ):
+            raise ValidationError(
+                "keywords must contain only DataLabShoppingKeywordGroup values"
+            )
         object.__setattr__(self, "device", _validate_device(self.device))
         object.__setattr__(self, "gender", _validate_gender(self.gender))
         object.__setattr__(self, "ages", _validate_ages(self.ages))

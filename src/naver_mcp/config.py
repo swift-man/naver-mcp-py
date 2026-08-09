@@ -62,6 +62,39 @@ def _is_loopback_host(host: str) -> bool:
         return False
 
 
+def _validate_api_base_url(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValidationError(
+            "api_base_url must be a valid HTTPS URL or loopback HTTP URL"
+        )
+    normalized = value.strip()
+    try:
+        parsed = urllib.parse.urlsplit(normalized)
+        _ = parsed.port
+    except ValueError as exc:
+        raise ValidationError(
+            "api_base_url must be a valid HTTPS URL or loopback HTTP URL"
+        ) from exc
+    if (
+        not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValidationError(
+            "api_base_url must be a valid HTTPS URL or loopback HTTP URL"
+        )
+    if parsed.scheme == "https":
+        return normalized
+    # 로컬 테스트 및 프록시 개발에만 평문 HTTP를 허용한다.
+    if parsed.scheme == "http" and _is_loopback_host(parsed.hostname):
+        return normalized
+    raise ValidationError(
+        "api_base_url must use HTTPS unless it targets a loopback host"
+    )
+
+
 @dataclass(frozen=True)
 class NaverMCPConfig:
     client_id: str = ""
@@ -91,6 +124,11 @@ class NaverMCPConfig:
         if not math.isfinite(normalized_timeout) or normalized_timeout <= 0:
             raise ValidationError("http_timeout_sec must be a finite positive number")
         object.__setattr__(self, "http_timeout_sec", normalized_timeout)
+        object.__setattr__(
+            self,
+            "api_base_url",
+            _validate_api_base_url(self.api_base_url),
+        )
 
         if not isinstance(self.remote_access, str):
             raise ValidationError("remote_access must be a string")

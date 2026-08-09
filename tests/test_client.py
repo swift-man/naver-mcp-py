@@ -75,6 +75,8 @@ class RecordingTransport:
             return {"items": []}
         if path.startswith(("/search-trend/v1/", "/shopping/v1/")):
             return {"results": []}
+        if path == "/search/v1/errata":
+            return {"errata": ""}
         if path == "/search/v1/adult":
             return {"adult": "0"}
         return {}
@@ -135,6 +137,32 @@ class NaverClientTest(unittest.TestCase):
         )
 
         self.assertEqual(config.api_base_url, "https://api.example.com/naver/")
+
+    def test_config_allows_http_api_base_url_only_for_loopback(self) -> None:
+        for value in (
+            "http://localhost:8080/naver",
+            "http://127.0.0.1:8080/naver",
+            "http://[::1]:8080/naver",
+        ):
+            with self.subTest(value=value):
+                config = NaverMCPConfig(api_base_url=value)
+                self.assertEqual(config.api_base_url, value)
+
+    def test_config_rejects_unsafe_or_invalid_api_base_url(self) -> None:
+        invalid_values = [
+            "http://api.example.com",
+            "ftp://api.example.com",
+            "api.example.com",
+            "https://",
+            "https://user:password@api.example.com",
+            "https://api.example.com?target=naver",
+            "https://api.example.com:99999",
+            None,
+        ]
+
+        for value in invalid_values:
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                NaverMCPConfig(api_base_url=value)  # type: ignore[arg-type]
 
     def test_config_rejects_non_positive_or_non_finite_timeout(self) -> None:
         for value in ("0", "-1", "nan", "inf", "-inf"):
@@ -455,6 +483,41 @@ class NaverClientTest(unittest.TestCase):
 
                 self.assertEqual(payload, response)
 
+    def test_malformed_errata_response_is_rejected(self) -> None:
+        payloads = [
+            {},
+            {"errata": None},
+            {"errata": 0},
+            {"result": {"errata": None}},
+        ]
+
+        for payload in payloads:
+            with self.subTest(payload=payload):
+                client = NaverClient(
+                    self.config,
+                    transport=lambda *args, payload=payload: payload,
+                )
+                with self.assertRaises(NaverAPIError):
+                    client.spell_check(QueryOnlyRequest(query="검색어"))
+
+    def test_errata_response_accepts_string_including_empty_value(self) -> None:
+        responses = [
+            {"errata": ""},
+            {"errata": "네이버"},
+            {"result": {"errata": "네이버"}},
+        ]
+
+        for response in responses:
+            with self.subTest(response=response):
+                client = NaverClient(
+                    self.config,
+                    transport=lambda *args, response=response: response,
+                )
+
+                payload = client.spell_check(QueryOnlyRequest(query="spdlqj"))
+
+                self.assertEqual(payload, response)
+
     def test_malformed_datalab_success_payload_is_rejected(self) -> None:
         request = DataLabSearchTrendsRequest(
             start_date="2026-08-01",
@@ -473,6 +536,8 @@ class NaverClientTest(unittest.TestCase):
             {"results": [{"data": [{"ratio": float("nan")}]}]},
             {"results": [{"data": [{"ratio": float("inf")}]}]},
             {"results": [{"data": [{"ratio": 10**400}]}]},
+            {"results": [{"data": [{"ratio": -1}]}]},
+            {"results": [{"data": [{"ratio": 100.1}]}]},
         ]
 
         for payload in payloads:
@@ -483,6 +548,26 @@ class NaverClientTest(unittest.TestCase):
                 )
                 with self.assertRaises(NaverAPIError):
                     client.datalab_search_trends(request)
+
+    def test_datalab_ratio_accepts_documented_boundaries(self) -> None:
+        request = DataLabSearchTrendsRequest(
+            start_date="2026-08-01",
+            end_date="2026-08-08",
+            time_unit="date",
+            keyword_groups=[DataLabKeywordGroup(group_name="파이썬", keywords=["파이썬"])],
+        )
+
+        for ratio in (0, 100):
+            response = {"results": [{"data": [{"ratio": ratio}]}]}
+            with self.subTest(ratio=ratio):
+                client = NaverClient(
+                    self.config,
+                    transport=lambda *args, response=response: response,
+                )
+
+                payload = client.datalab_search_trends(request)
+
+                self.assertEqual(payload, response)
 
     def test_default_transport_replaces_invalid_utf8_bytes(self) -> None:
         response = mock.MagicMock()

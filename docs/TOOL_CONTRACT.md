@@ -31,6 +31,9 @@ Client ID: X-NCP-APIGW-API-KEY-ID
 Client Secret: X-NCP-APIGW-API-KEY
 ```
 
+`NAVER_API_BASE_URL` must use HTTPS. Plain HTTP is accepted only for an explicit
+loopback host such as `localhost`, `127.0.0.1`, or `::1` during local testing.
+
 ## Common Search Response Shape
 
 Search tools return this shape whenever practical:
@@ -291,6 +294,9 @@ Output:
 }
 ```
 
+The upstream `errata` value must be a string. An empty string is valid and means
+that NAVER found no typo.
+
 ### `detect_adult_query`
 
 Input:
@@ -411,6 +417,7 @@ Notes:
 - `category` appears for shopping category and shopping keyword tools
 - `keywords` appears for search trends and shopping keyword tools
 - `group` appears only for breakdown tools such as device, gender, or age
+- `ratio` is a finite number from `0` through `100`
 
 ### `datalab_search_trends`
 
@@ -638,6 +645,7 @@ Input:
 - `ages` must contain only `10`, `20`, `30`, `40`, `50`, `60`
 - NAVER API HUB documents `device`, `gender`, and `ages` as optional filters on all six category and keyword breakdown endpoints; supplied filters are forwarded unchanged
 - `ages`, group `keywords`, and group `params` must be JSON arrays of strings, not scalar strings
+- `keyword_groups`, `categories`, and shopping `keywords` must contain only their documented group object shapes
 
 ## Error Shape
 

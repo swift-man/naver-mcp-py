@@ -66,6 +66,7 @@ server.py
 Holds environment parsing and defaults:
 
 - API credentials
+- validated upstream API base URL with HTTPS required outside loopback
 - host and port
 - MCP transport configuration
 - remote-access protection mode
@@ -209,6 +210,7 @@ Book and shopping intents use `web` and `blog` fallback sources because the dedi
 - Errors should include a stable error code and retryable flag.
 - Cache should be conservative and time-bounded.
 - Credential errors should surface clearly.
+- Upstream API responses should be type- and range-checked before normalization and caching.
 - HTTP servers should bind to loopback by default.
 - Non-loopback binding requires FastMCP authentication or an operator-confirmed firewall/VPN allowlist.
 

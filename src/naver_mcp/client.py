@@ -277,6 +277,11 @@ class NaverClient:
             if not isinstance(adult, str) or adult.strip() not in {"0", "1"}:
                 raise NaverAPIError("Naver API returned invalid adult query result")
 
+        if endpoint == "search/v1/errata":
+            errata = extract_single_value(payload, "errata")
+            if not isinstance(errata, str):
+                raise NaverAPIError("Naver API returned invalid errata result")
+
         if endpoint.startswith(("search-trend/v1/", "shopping/v1/")):
             if "results" not in payload:
                 raise NaverAPIError("Naver API response is missing DataLab results")
@@ -296,10 +301,12 @@ class NaverClient:
                     if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
                         raise NaverAPIError("Naver API returned invalid DataLab ratio")
                     try:
-                        finite_ratio = math.isfinite(float(ratio))
+                        normalized_ratio = float(ratio)
                     except (OverflowError, ValueError):
-                        finite_ratio = False
-                    if not finite_ratio:
+                        normalized_ratio = math.nan
+                    if not math.isfinite(normalized_ratio) or not (
+                        0 <= normalized_ratio <= 100
+                    ):
                         raise NaverAPIError("Naver API returned invalid DataLab ratio")
 
         return payload
