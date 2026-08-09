@@ -386,6 +386,25 @@ class DataLabToolsTest(unittest.TestCase):
                 keyword_groups=[],
             )
 
+    def test_search_trends_request_rejects_invalid_keyword_group_types(self) -> None:
+        invalid_values = [
+            "keyword",
+            None,
+            {"group_name": "파이썬", "keywords": ["파이썬"]},
+            ["keyword"],
+            [{"group_name": "파이썬", "keywords": ["파이썬"]}],
+        ]
+
+        for keyword_groups in invalid_values:
+            with self.subTest(keyword_groups=keyword_groups):
+                with self.assertRaises(ValidationError):
+                    DataLabSearchTrendsRequest(
+                        start_date="2026-03-01",
+                        end_date="2026-03-18",
+                        time_unit="date",
+                        keyword_groups=keyword_groups,  # type: ignore[arg-type]
+                    )
+
     def test_datalab_search_trends_validates_api_hub_age_codes(self) -> None:
         with self.assertRaises(ValidationError):
             self.tools.datalab_search_trends(

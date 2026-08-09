@@ -406,10 +406,18 @@ class DataLabSearchTrendsRequest:
         object.__setattr__(self, "start_date", start_date)
         object.__setattr__(self, "end_date", end_date)
         object.__setattr__(self, "time_unit", _validate_time_unit(self.time_unit))
+        _validate_list_input(self.keyword_groups, "keyword_groups")
         if not self.keyword_groups:
             raise ValidationError("keyword_groups must not be empty")
         if len(self.keyword_groups) > 5:
             raise ValidationError("keyword_groups must contain at most 5 groups")
+        if any(
+            not isinstance(group, DataLabKeywordGroup)
+            for group in self.keyword_groups
+        ):
+            raise ValidationError(
+                "keyword_groups must contain only DataLabKeywordGroup values"
+            )
         object.__setattr__(self, "device", _validate_device(self.device))
         object.__setattr__(self, "gender", _validate_gender(self.gender))
         object.__setattr__(self, "ages", _validate_search_trend_ages(self.ages))

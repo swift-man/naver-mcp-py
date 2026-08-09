@@ -190,7 +190,7 @@ def normalize_spell_check_response(
     *,
     cached: bool = False,
 ) -> dict[str, Any]:
-    corrected = _extract_single_value(payload, "errata")
+    corrected = extract_single_value(payload, "errata")
     corrected_query = strip_html(corrected) or query
     return {
         "query": query,
@@ -206,7 +206,7 @@ def normalize_adult_query_response(
     *,
     cached: bool = False,
 ) -> dict[str, Any]:
-    adult_value = _extract_single_value(payload, "adult")
+    adult_value = extract_single_value(payload, "adult")
     normalized_flag = str(adult_value).strip().lower()
     is_adult = normalized_flag in {"1", "true", "y", "yes"}
     return {
@@ -232,17 +232,17 @@ def normalize_datalab_device_trends_response(
     return _normalize_datalab_response(payload, cached=cached)
 
 
-def _extract_single_value(payload: Mapping[str, Any], field_name: str) -> str:
+def extract_single_value(payload: Mapping[str, Any], field_name: str) -> Optional[Any]:
     # errata/adult 응답은 배포 환경에 따라 필드 중첩 형태가 달라질 수 있어 여러 경로를 순차 탐색한다.
     direct = payload.get(field_name)
     if direct is not None:
-        return str(direct)
+        return direct
 
     result = payload.get("result")
     if isinstance(result, Mapping):
         nested = result.get(field_name)
         if nested is not None:
-            return str(nested)
+            return nested
 
         item = result.get("item")
         extracted = _extract_value_from_item_container(item, field_name)
@@ -257,19 +257,19 @@ def _extract_single_value(payload: Mapping[str, Any], field_name: str) -> str:
     if extracted is not None:
         return extracted
 
-    return ""
+    return None
 
 
-def _extract_value_from_item_container(item: Any, field_name: str) -> Optional[str]:
+def _extract_value_from_item_container(item: Any, field_name: str) -> Optional[Any]:
     if isinstance(item, Mapping):
         value = item.get(field_name)
         if value is not None:
-            return str(value)
+            return value
         return None
     if isinstance(item, Iterable) and not isinstance(item, (str, bytes, bytearray)):
         for candidate in item:
             if isinstance(candidate, Mapping) and candidate.get(field_name) is not None:
-                return str(candidate.get(field_name))
+                return candidate.get(field_name)
     return None
 
 

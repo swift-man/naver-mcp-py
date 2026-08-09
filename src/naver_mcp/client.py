@@ -38,6 +38,7 @@ from .models import (
     ShopSearchRequest,
     WebSearchRequest,
 )
+from .normalize import extract_single_value
 
 Transport = Callable[
     [str, str, Mapping[str, str], Optional[bytes], float],
@@ -254,6 +255,8 @@ class NaverClient:
             items = payload["items"]
             if not isinstance(items, list):
                 raise NaverAPIError("Naver API returned invalid search items")
+            if any(not isinstance(item, Mapping) for item in items):
+                raise NaverAPIError("Naver API returned invalid search item")
             for field_name in ("total", "start", "display"):
                 value = payload.get(field_name)
                 if value is None:
@@ -268,6 +271,11 @@ class NaverClient:
                     raise NaverAPIError(
                         f"Naver API returned invalid search {field_name}"
                     ) from exc
+
+        if endpoint == "search/v1/adult":
+            adult = extract_single_value(payload, "adult")
+            if not isinstance(adult, str) or adult.strip() not in {"0", "1"}:
+                raise NaverAPIError("Naver API returned invalid adult query result")
 
         if endpoint.startswith(("search-trend/v1/", "shopping/v1/")):
             if "results" not in payload:
@@ -335,9 +343,9 @@ class NaverClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                raw_body = response.read().decode("utf-8", errors="replace")
+                raw_body = self._read_response_body(response)
         except urllib.error.HTTPError as exc:
-            raw_body = exc.read().decode("utf-8", errors="replace")
+            raw_body = self._read_http_error_body(exc)
             self._raise_for_http_error(exc.code, raw_body)
         except urllib.error.URLError as exc:
             if isinstance(exc.reason, socket.timeout) or "timed out" in str(exc.reason).lower():
@@ -356,6 +364,42 @@ class NaverClient:
         if not isinstance(parsed, Mapping):
             raise NaverAPIError("Naver API returned an unexpected payload")
         return parsed
+
+    @staticmethod
+    def _read_response_body(response: Any) -> str:
+        try:
+            return response.read().decode("utf-8", errors="replace")
+        except urllib.error.URLError as exc:
+            if isinstance(exc.reason, socket.timeout) or "timed out" in str(
+                exc.reason
+            ).lower():
+                raise NaverTimeoutError("Naver API response timed out") from exc
+            raise NaverAPIError(
+                "Naver API response was interrupted",
+                retryable=True,
+            ) from exc
+        except TimeoutError as exc:
+            raise NaverTimeoutError("Naver API response timed out") from exc
+        except (http.client.HTTPException, OSError) as exc:
+            # 본문 수신 중 연결이 끊겨도 원시 네트워크 예외가 도구 경계를 넘지 않게 한다.
+            raise NaverAPIError(
+                "Naver API response was interrupted",
+                retryable=True,
+            ) from exc
+
+    def _read_http_error_body(self, error: urllib.error.HTTPError) -> str:
+        try:
+            return self._read_response_body(error)
+        except NaverTimeoutError as exc:
+            if error.code >= 500:
+                raise NaverTimeoutError(
+                    "Naver API error response timed out",
+                    status_code=error.code,
+                ) from exc
+            self._raise_for_http_error(error.code, "")
+        except NaverAPIError:
+            # 본문이 손상되어도 이미 받은 인증·한도·서버 상태 분류를 우선한다.
+            self._raise_for_http_error(error.code, "")
 
     def _raise_for_http_error(self, status_code: int, body: str) -> None:
         # 상위 계층이 안정적으로 처리할 수 있도록 HTTP 상태를 내부 에러 코드로 매핑한다.

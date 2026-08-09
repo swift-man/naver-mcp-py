@@ -4,6 +4,7 @@ import http.client
 import json
 import sys
 import unittest
+import urllib.error
 import urllib.parse
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -74,6 +75,8 @@ class RecordingTransport:
             return {"items": []}
         if path.startswith(("/search-trend/v1/", "/shopping/v1/")):
             return {"results": []}
+        if path == "/search/v1/adult":
+            return {"adult": "0"}
         return {}
 
 
@@ -400,6 +403,8 @@ class NaverClientTest(unittest.TestCase):
         payloads = [
             {},
             {"items": None},
+            {"items": [None]},
+            {"items": ["not-an-object"]},
             {"items": [], "total": "not-a-number"},
         ]
 
@@ -411,6 +416,44 @@ class NaverClientTest(unittest.TestCase):
                 )
                 with self.assertRaises(NaverAPIError):
                     client.search_blog(BlogSearchRequest(query="네이버"))
+
+    def test_malformed_adult_query_response_is_rejected(self) -> None:
+        payloads = [
+            {},
+            {"adult": None},
+            {"adult": 0},
+            {"adult": "2"},
+            {"adult": "unknown"},
+        ]
+
+        for payload in payloads:
+            with self.subTest(payload=payload):
+                client = NaverClient(
+                    self.config,
+                    transport=lambda *args, payload=payload: payload,
+                )
+                with self.assertRaises(NaverAPIError):
+                    client.detect_adult_query(QueryOnlyRequest(query="검색어"))
+
+    def test_adult_query_response_accepts_documented_codes(self) -> None:
+        responses = [
+            {"adult": "0"},
+            {"result": {"adult": "1"}},
+            {"result": {"item": [{"adult": "1"}]}},
+            {"item": {"adult": "0"}},
+            {"items": [{"adult": "1"}]},
+        ]
+
+        for response in responses:
+            with self.subTest(response=response):
+                client = NaverClient(
+                    self.config,
+                    transport=lambda *args, response=response: response,
+                )
+
+                payload = client.detect_adult_query(QueryOnlyRequest(query="검색어"))
+
+                self.assertEqual(payload, response)
 
     def test_malformed_datalab_success_payload_is_rejected(self) -> None:
         request = DataLabSearchTrendsRequest(
@@ -483,6 +526,83 @@ class NaverClientTest(unittest.TestCase):
                         )
 
                 self.assertTrue(context.exception.is_retryable)
+
+    def test_interrupted_http_error_bodies_are_structured(self) -> None:
+        cases = [
+            (
+                http.client.IncompleteRead(b'{"error":', 1),
+                NaverAPIError,
+                True,
+            ),
+            (
+                http.client.RemoteDisconnected("remote closed connection"),
+                NaverAPIError,
+                True,
+            ),
+            (TimeoutError("timed out"), NaverTimeoutError, True),
+        ]
+
+        for read_error, expected_error, retryable in cases:
+            with self.subTest(read_error=read_error):
+                error_body = mock.MagicMock()
+                error_body.read.side_effect = read_error
+                http_error = urllib.error.HTTPError(
+                    "https://api.example.com/test",
+                    500,
+                    "Server Error",
+                    {},
+                    error_body,
+                )
+
+                with mock.patch(
+                    "naver_mcp.client.urllib.request.urlopen",
+                    side_effect=http_error,
+                ):
+                    with self.assertRaises(expected_error) as context:
+                        self.client._default_transport(
+                            "GET",
+                            "https://api.example.com/test",
+                            {},
+                            None,
+                            1.0,
+                        )
+
+                self.assertEqual(context.exception.is_retryable, retryable)
+
+    def test_interrupted_error_body_preserves_non_retryable_http_status(self) -> None:
+        cases = [
+            (401, NaverAuthError, False),
+            (403, NaverAuthError, False),
+            (429, NaverRateLimitError, False),
+        ]
+
+        for status_code, expected_error, retryable in cases:
+            with self.subTest(status_code=status_code):
+                error_body = mock.MagicMock()
+                error_body.read.side_effect = http.client.IncompleteRead(b"", 1)
+                http_error = urllib.error.HTTPError(
+                    "https://api.example.com/test",
+                    status_code,
+                    "Request Error",
+                    {},
+                    error_body,
+                )
+
+                with mock.patch(
+                    "naver_mcp.client.urllib.request.urlopen",
+                    side_effect=http_error,
+                ):
+                    with self.assertRaises(expected_error) as context:
+                        self.client._default_transport(
+                            "GET",
+                            "https://api.example.com/test",
+                            {},
+                            None,
+                            1.0,
+                        )
+
+                self.assertEqual(context.exception.status_code, status_code)
+                self.assertEqual(context.exception.is_retryable, retryable)
 
     def test_timeout_fails_fast_without_retry(self) -> None:
         calls = 0

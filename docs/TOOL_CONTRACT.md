@@ -313,6 +313,10 @@ Output:
 }
 ```
 
+The upstream `adult` field must be the documented string code `"0"` or `"1"`.
+Missing or unknown values are returned as `NAVER_API_ERROR` instead of being
+treated as a non-adult result.
+
 ### `search_naver_auto`
 
 Purpose:
