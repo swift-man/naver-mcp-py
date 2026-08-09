@@ -11,6 +11,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from naver_mcp.cache import TTLCache
+from naver_mcp.config import NaverMCPConfig
 from naver_mcp.errors import NaverServiceUnavailableError, ValidationError
 from naver_mcp.models import (
     BlogSearchRequest,
@@ -386,6 +387,24 @@ class SearchToolsTest(unittest.TestCase):
 
         self.assertTrue(result["is_adult"])
         self.assertFalse(result["meta"]["cached"])
+
+    def test_zero_cache_ttl_disables_auxiliary_tool_cache(self) -> None:
+        client = FakeSearchClient()
+        cache = TTLCache(default_ttl_sec=0)
+        tools = SearchTools(
+            client,
+            cache=cache,
+            config=NaverMCPConfig(cache_ttl_sec=0),
+        )
+
+        tools.spell_check(query="pangyp restaurants")
+        tools.spell_check(query="pangyp restaurants")
+        tools.detect_adult_query(query="adult query")
+        tools.detect_adult_query(query="adult query")
+
+        self.assertEqual(client.calls.count(("spell_check", "pangyp restaurants")), 2)
+        self.assertEqual(client.calls.count(("detect_adult_query", "adult query")), 2)
+        self.assertEqual(cache.size, 0)
 
     def test_search_local_uses_cache_on_repeat_calls(self) -> None:
         first = self.tools.search_local(query="판교 맛집", sort="comment")

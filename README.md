@@ -169,11 +169,11 @@ Available environment variables:
 - `NAVER_MCP_HOST`
 - `NAVER_MCP_PORT` (integer from `1` through `65535`)
 - `NAVER_MCP_PATH`
-- `NAVER_MCP_TRANSPORT`
+- `NAVER_MCP_TRANSPORT` (`stdio`, `http`, `sse`, or `streamable-http`)
 - `NAVER_MCP_REMOTE_ACCESS` (optional; `disabled`, `fastmcp-auth`, or `trusted-network`)
 - `NAVER_MCP_AUTH_JWKS_URI`, `NAVER_MCP_AUTH_ISSUER`, and `NAVER_MCP_AUTH_AUDIENCE` when using JWT authentication
 - `NAVER_HTTP_TIMEOUT_SEC`
-- `NAVER_CACHE_TTL_SEC` (non-negative integer; `0` disables the default search cache)
+- `NAVER_CACHE_TTL_SEC` (non-negative integer; `0` disables all Search API tool caching, including spell and adult-query results)
 
 You can use `.env.example` as a template, but the current code does not auto-load `.env`.
 On Linux servers, export the variables explicitly or load them through your process manager such as `systemd`.

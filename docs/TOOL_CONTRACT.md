@@ -692,6 +692,9 @@ Suggested defaults:
 - spell check and adult detection: 30 minutes
 - DataLab tools: 30 minutes or longer
 
+`NAVER_CACHE_TTL_SEC=0` disables every Search API tool cache, including spell
+check and adult-query detection. DataLab retains its 30-minute minimum.
+
 The process-local cache is bounded to 1,024 entries. Writes prune expired entries,
 and capacity pressure evicts the least recently used entry.
 

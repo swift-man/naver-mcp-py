@@ -11,6 +11,7 @@ from .errors import ValidationError
 
 DEFAULT_API_BASE_URL = "https://naverapihub.apigw.ntruss.com"
 HTTP_TRANSPORTS = {"http", "sse", "streamable-http"}
+SUPPORTED_TRANSPORTS = HTTP_TRANSPORTS | {"stdio"}
 REMOTE_ACCESS_MODES = {"disabled", "fastmcp-auth", "trusted-network"}
 
 
@@ -162,6 +163,14 @@ class NaverMCPConfig:
             "api_base_url",
             _validate_api_base_url(self.api_base_url),
         )
+
+        if not isinstance(self.transport, str):
+            raise ValidationError("transport must be a string")
+        transport = self.transport.strip().lower()
+        if transport not in SUPPORTED_TRANSPORTS:
+            allowed = ", ".join(sorted(SUPPORTED_TRANSPORTS))
+            raise ValidationError(f"transport must be one of: {allowed}")
+        object.__setattr__(self, "transport", transport)
 
         if not isinstance(self.remote_access, str):
             raise ValidationError("remote_access must be a string")

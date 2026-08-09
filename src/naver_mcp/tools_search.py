@@ -382,7 +382,10 @@ class SearchTools:
 
         payload = client_method(request)
         normalized = normalizer(request.query, payload, cached=False)
-        self.cache.set(cache_key, normalized, ttl_sec=self.AUXILIARY_CACHE_TTL_SEC)
+        auxiliary_ttl = (
+            0 if self.config.cache_ttl_sec == 0 else self.AUXILIARY_CACHE_TTL_SEC
+        )
+        self.cache.set(cache_key, normalized, ttl_sec=auxiliary_ttl)
         return normalized
 
     def _detect_auto_intent(self, query: str) -> str:

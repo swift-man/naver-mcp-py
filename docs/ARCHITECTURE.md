@@ -223,6 +223,9 @@ Recommended defaults:
 - spell/adult detection: 30 minutes
 - DataLab trends: 30 minutes or longer
 
+Setting `NAVER_CACHE_TTL_SEC=0` disables all Search API tool caching, including
+spell and adult-query results. DataLab keeps its documented 30-minute minimum.
+
 Expired entries are pruned during writes, and the least recently used entry is
 evicted when the in-memory cache reaches its 1,024-entry limit.
 

@@ -28,3 +28,4 @@ All notable changes to this project are documented in this file.
 - Reject invalid DataLab response elements, out-of-range ratios, malformed errata values, unsafe API base URLs, invalid timeout values, and non-integer pagination inputs.
 - Prevent authentication headers from crossing origins or downgrading to HTTP through upstream redirects, and reject DataLab results that omit their `data` field.
 - Reject malformed JWKS URLs, invalid ports and cache TTL values, and DataLab points without a valid period; bound the in-memory cache with expiration pruning and LRU eviction.
+- Honor a zero Search API cache TTL for spell and adult-query tools, require groups in DataLab breakdown responses, and validate supported server transports before startup.

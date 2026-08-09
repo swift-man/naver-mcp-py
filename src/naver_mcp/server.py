@@ -455,6 +455,9 @@ def healthz() -> dict[str, str]:
 def main() -> None:
     config = NaverMCPConfig.from_env()
     server = create_server(config)
+    if config.transport == "stdio":
+        server.run(transport=config.transport)
+        return
     server.run(
         transport=config.transport,
         host=config.host,

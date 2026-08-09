@@ -45,6 +45,15 @@ Transport = Callable[
     Mapping[str, Any],
 ]
 
+DATALAB_GROUPED_ENDPOINTS = {
+    "shopping/v1/category/device",
+    "shopping/v1/category/gender",
+    "shopping/v1/category/age",
+    "shopping/v1/category/keyword/device",
+    "shopping/v1/category/keyword/gender",
+    "shopping/v1/category/keyword/age",
+}
+
 
 def _url_origin(url: str) -> Optional[tuple[str, str, int]]:
     try:
@@ -355,6 +364,10 @@ class NaverClient:
                     period = point.get("period")
                     if not isinstance(period, str) or not period.strip():
                         raise NaverAPIError("Naver API returned invalid DataLab period")
+                    if endpoint in DATALAB_GROUPED_ENDPOINTS or "group" in point:
+                        group = point.get("group")
+                        if not isinstance(group, str) or not group.strip():
+                            raise NaverAPIError("Naver API returned invalid DataLab group")
                     ratio = point.get("ratio")
                     if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
                         raise NaverAPIError("Naver API returned invalid DataLab ratio")

@@ -185,6 +185,16 @@ class NaverClientTest(unittest.TestCase):
 
         self.assertEqual(NaverMCPConfig(cache_ttl_sec=0).cache_ttl_sec, 0)
 
+    def test_config_validates_and_normalizes_transport(self) -> None:
+        for value in ("stdio", "http", "sse", "streamable-http"):
+            with self.subTest(value=value):
+                self.assertEqual(NaverMCPConfig(transport=value).transport, value)
+
+        self.assertEqual(NaverMCPConfig(transport=" STDIO ").transport, "stdio")
+        for value in ("websocket", "", None):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                NaverMCPConfig(transport=value)  # type: ignore[arg-type]
+
     def test_search_requests_use_api_hub_paths_and_headers(self) -> None:
         self.client.search_local(LocalSearchRequest(query="카페"))
         self.client.search_blog(BlogSearchRequest(query="카페"))
@@ -597,6 +607,62 @@ class NaverClientTest(unittest.TestCase):
                 payload = client.datalab_search_trends(request)
 
                 self.assertEqual(payload, response)
+
+    def test_grouped_datalab_endpoints_require_string_group(self) -> None:
+        endpoints = [
+            "shopping/v1/category/device",
+            "shopping/v1/category/gender",
+            "shopping/v1/category/age",
+            "shopping/v1/category/keyword/device",
+            "shopping/v1/category/keyword/gender",
+            "shopping/v1/category/keyword/age",
+        ]
+        invalid_groups = [None, 10, {}, "   "]
+
+        for endpoint in endpoints:
+            for group in invalid_groups:
+                payload = {
+                    "results": [
+                        {
+                            "data": [
+                                {
+                                    "period": "2026-08-01",
+                                    "group": group,
+                                    "ratio": 50,
+                                }
+                            ]
+                        }
+                    ]
+                }
+                with (
+                    self.subTest(endpoint=endpoint, group=group),
+                    self.assertRaises(NaverAPIError),
+                ):
+                    NaverClient._validate_response_payload(endpoint, payload)
+
+            missing_group = {
+                "results": [
+                    {"data": [{"period": "2026-08-01", "ratio": 50}]}
+                ]
+            }
+            with self.subTest(endpoint=endpoint), self.assertRaises(NaverAPIError):
+                NaverClient._validate_response_payload(endpoint, missing_group)
+
+    def test_aggregate_datalab_endpoints_do_not_require_group(self) -> None:
+        payload = {
+            "results": [{"data": [{"period": "2026-08-01", "ratio": 50}]}]
+        }
+
+        for endpoint in (
+            "search-trend/v1/search",
+            "shopping/v1/categories",
+            "shopping/v1/category/keywords",
+        ):
+            with self.subTest(endpoint=endpoint):
+                self.assertEqual(
+                    NaverClient._validate_response_payload(endpoint, payload),
+                    payload,
+                )
 
     def test_default_transport_replaces_invalid_utf8_bytes(self) -> None:
         response = mock.MagicMock()

@@ -5,7 +5,7 @@ import sys
 import unittest
 from pathlib import Path
 from typing import Any, Callable
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 if str(SRC_DIR) not in sys.path:
@@ -13,7 +13,7 @@ if str(SRC_DIR) not in sys.path:
 
 from naver_mcp.config import NaverMCPConfig
 from naver_mcp.errors import ValidationError
-from naver_mcp.server import create_server
+from naver_mcp.server import create_server, main
 
 
 class FakeFastMCP:
@@ -212,6 +212,40 @@ class ServerContractTest(unittest.TestCase):
 
         self.assertEqual(result["error"]["code"], "VALIDATION_ERROR")
         self.assertFalse(result["error"]["retryable"])
+
+    def test_main_passes_only_transport_for_stdio(self) -> None:
+        config = NaverMCPConfig(transport="stdio")
+        server = Mock()
+
+        with (
+            patch("naver_mcp.server.NaverMCPConfig.from_env", return_value=config),
+            patch("naver_mcp.server.create_server", return_value=server),
+        ):
+            main()
+
+        server.run.assert_called_once_with(transport="stdio")
+
+    def test_main_passes_network_options_for_http_transport(self) -> None:
+        config = NaverMCPConfig(
+            transport="http",
+            host="127.0.0.1",
+            port=8100,
+            path="/naver_mcp",
+        )
+        server = Mock()
+
+        with (
+            patch("naver_mcp.server.NaverMCPConfig.from_env", return_value=config),
+            patch("naver_mcp.server.create_server", return_value=server),
+        ):
+            main()
+
+        server.run.assert_called_once_with(
+            transport="http",
+            host="127.0.0.1",
+            port=8100,
+            path="/naver_mcp",
+        )
 
 
 if __name__ == "__main__":
