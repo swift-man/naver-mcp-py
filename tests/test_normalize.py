@@ -195,6 +195,24 @@ class NormalizeTest(unittest.TestCase):
 
         self.assertEqual(result["results"][0]["keywords"], ["정장", "수트"])
 
+    def test_normalize_datalab_does_not_stringify_invalid_metadata(self) -> None:
+        payload = {
+            "results": [
+                {
+                    "title": {"unexpected": "title"},
+                    "keywords": {"unexpected": "keyword"},
+                    "category": "50000000",
+                    "data": [],
+                }
+            ]
+        }
+
+        result = normalize_datalab_category_trends_response(payload)
+
+        self.assertEqual(result["results"][0]["title"], "")
+        self.assertNotIn("keywords", result["results"][0])
+        self.assertNotIn("category", result["results"][0])
+
 
 if __name__ == "__main__":
     unittest.main()

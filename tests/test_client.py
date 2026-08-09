@@ -14,7 +14,12 @@ SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from naver_mcp.client import NaverClient, _SameOriginRedirectHandler
+from naver_mcp.cache import MAX_CACHE_TTL_SEC
+from naver_mcp.client import (
+    DATALAB_GROUPED_ENDPOINTS,
+    NaverClient,
+    _SameOriginRedirectHandler,
+)
 from naver_mcp.config import NaverMCPConfig
 from naver_mcp.errors import (
     NaverAPIError,
@@ -179,11 +184,19 @@ class NaverClientTest(unittest.TestCase):
                 NaverMCPConfig(port=value)  # type: ignore[arg-type]
 
     def test_config_rejects_invalid_cache_ttl(self) -> None:
-        for value in (-1, True, 1.5):
+        for value in (-1, True, 1.5, MAX_CACHE_TTL_SEC + 1, 10**309):
             with self.subTest(value=value), self.assertRaises(ValidationError):
                 NaverMCPConfig(cache_ttl_sec=value)  # type: ignore[arg-type]
 
         self.assertEqual(NaverMCPConfig(cache_ttl_sec=0).cache_ttl_sec, 0)
+        self.assertEqual(
+            NaverMCPConfig(cache_ttl_sec=MAX_CACHE_TTL_SEC).cache_ttl_sec,
+            MAX_CACHE_TTL_SEC,
+        )
+
+    def test_config_rejects_cache_ttl_above_limit_from_environment(self) -> None:
+        with self.assertRaises(ValidationError):
+            NaverMCPConfig.from_env({"NAVER_CACHE_TTL_SEC": str(10**309)})
 
     def test_config_validates_and_normalizes_transport(self) -> None:
         for value in ("stdio", "http", "sse", "streamable-http"):
@@ -547,32 +560,40 @@ class NaverClientTest(unittest.TestCase):
             time_unit="date",
             keyword_groups=[DataLabKeywordGroup(group_name="파이썬", keywords=["파이썬"])],
         )
+
+        def search_trend_payload(data: Any) -> dict[str, Any]:
+            return {
+                "results": [
+                    {
+                        "title": "파이썬",
+                        "keywords": ["파이썬"],
+                        "data": data,
+                    }
+                ]
+            }
+
         payloads = [
             {},
             {"results": [None]},
             {"results": [{}]},
-            {"results": [{"data": None}]},
-            {"results": [{"data": [None]}]},
-            {"results": [{"data": [{"ratio": 1}]}]},
-            {"results": [{"data": [{"period": None, "ratio": 1}]}]},
-            {"results": [{"data": [{"period": 20260801, "ratio": 1}]}]},
-            {"results": [{"data": [{"period": "   ", "ratio": 1}]}]},
-            {"results": [{"data": [{"period": "2026-08-01", "ratio": None}]}]},
-            {"results": [{"data": [{"period": "2026-08-01", "ratio": True}]}]},
-            {"results": [{"data": [{"period": "2026-08-01", "ratio": "12.3"}]}]},
-            {
-                "results": [
-                    {"data": [{"period": "2026-08-01", "ratio": float("nan")}]}
-                ]
-            },
-            {
-                "results": [
-                    {"data": [{"period": "2026-08-01", "ratio": float("inf")}]}
-                ]
-            },
-            {"results": [{"data": [{"period": "2026-08-01", "ratio": 10**400}]}]},
-            {"results": [{"data": [{"period": "2026-08-01", "ratio": -1}]}]},
-            {"results": [{"data": [{"period": "2026-08-01", "ratio": 100.1}]}]},
+            search_trend_payload(None),
+            search_trend_payload([None]),
+            search_trend_payload([{"ratio": 1}]),
+            search_trend_payload([{"period": None, "ratio": 1}]),
+            search_trend_payload([{"period": 20260801, "ratio": 1}]),
+            search_trend_payload([{"period": "   ", "ratio": 1}]),
+            search_trend_payload([{"period": "2026-08-01", "ratio": None}]),
+            search_trend_payload([{"period": "2026-08-01", "ratio": True}]),
+            search_trend_payload([{"period": "2026-08-01", "ratio": "12.3"}]),
+            search_trend_payload(
+                [{"period": "2026-08-01", "ratio": float("nan")}]
+            ),
+            search_trend_payload(
+                [{"period": "2026-08-01", "ratio": float("inf")}]
+            ),
+            search_trend_payload([{"period": "2026-08-01", "ratio": 10**400}]),
+            search_trend_payload([{"period": "2026-08-01", "ratio": -1}]),
+            search_trend_payload([{"period": "2026-08-01", "ratio": 100.1}]),
         ]
 
         for payload in payloads:
@@ -595,7 +616,11 @@ class NaverClientTest(unittest.TestCase):
         for ratio in (0, 100):
             response = {
                 "results": [
-                    {"data": [{"period": "2026-08-01", "ratio": ratio}]}
+                    {
+                        "title": "파이썬",
+                        "keywords": ["파이썬"],
+                        "data": [{"period": "2026-08-01", "ratio": ratio}],
+                    }
                 ]
             }
             with self.subTest(ratio=ratio):
@@ -620,10 +645,20 @@ class NaverClientTest(unittest.TestCase):
         invalid_groups = [None, 10, {}, "   "]
 
         for endpoint in endpoints:
+            metadata = {"title": "테스트"}
+            if endpoint in {
+                "shopping/v1/category/keyword/device",
+                "shopping/v1/category/keyword/gender",
+                "shopping/v1/category/keyword/age",
+            }:
+                metadata["keyword"] = ["정장"]
+            else:
+                metadata["category"] = ["50000000"]
             for group in invalid_groups:
                 payload = {
                     "results": [
                         {
+                            **metadata,
                             "data": [
                                 {
                                     "period": "2026-08-01",
@@ -642,7 +677,10 @@ class NaverClientTest(unittest.TestCase):
 
             missing_group = {
                 "results": [
-                    {"data": [{"period": "2026-08-01", "ratio": 50}]}
+                    {
+                        **metadata,
+                        "data": [{"period": "2026-08-01", "ratio": 50}],
+                    }
                 ]
             }
             with self.subTest(endpoint=endpoint), self.assertRaises(NaverAPIError):
@@ -654,8 +692,15 @@ class NaverClientTest(unittest.TestCase):
             "shopping/v1/categories",
             "shopping/v1/category/keywords",
         ):
-            result = {"data": [{"period": "2026-08-01", "ratio": 50}]}
-            if endpoint == "shopping/v1/category/keywords":
+            result = {
+                "title": "테스트",
+                "data": [{"period": "2026-08-01", "ratio": 50}],
+            }
+            if endpoint == "search-trend/v1/search":
+                result["keywords"] = ["파이썬"]
+            elif endpoint == "shopping/v1/categories":
+                result["category"] = ["50000000"]
+            else:
                 result["keyword"] = ["정장"]
             payload = {"results": [result]}
             with self.subTest(endpoint=endpoint):
@@ -681,6 +726,7 @@ class NaverClientTest(unittest.TestCase):
                 payload = {
                     "results": [
                         {
+                            "title": "정장",
                             "keyword": keywords,
                             "data": [point],
                         }
@@ -705,6 +751,7 @@ class NaverClientTest(unittest.TestCase):
             payload = {
                 "results": [
                     {
+                        "title": "정장",
                         "keyword": ["정장"],
                         "data": [point],
                     }
@@ -715,6 +762,76 @@ class NaverClientTest(unittest.TestCase):
                     NaverClient._validate_response_payload(endpoint, payload),
                     payload,
                 )
+
+    def test_datalab_result_titles_require_non_empty_strings(self) -> None:
+        endpoints = [
+            "search-trend/v1/search",
+            "shopping/v1/categories",
+            "shopping/v1/category/device",
+            "shopping/v1/category/gender",
+            "shopping/v1/category/age",
+            "shopping/v1/category/keywords",
+            "shopping/v1/category/keyword/device",
+            "shopping/v1/category/keyword/gender",
+            "shopping/v1/category/keyword/age",
+        ]
+
+        for endpoint in endpoints:
+            for title in (None, 10, {}, "   "):
+                payload = {"results": [{"title": title, "data": []}]}
+                with (
+                    self.subTest(endpoint=endpoint, title=title),
+                    self.assertRaises(NaverAPIError),
+                ):
+                    NaverClient._validate_response_payload(endpoint, payload)
+
+    def test_search_and_category_metadata_require_string_arrays(self) -> None:
+        endpoints = {
+            "search-trend/v1/search": "keywords",
+            "shopping/v1/categories": "category",
+            "shopping/v1/category/device": "category",
+            "shopping/v1/category/gender": "category",
+            "shopping/v1/category/age": "category",
+        }
+        invalid_values = [None, "값", [], [None], [10], ["   "], {}]
+
+        for endpoint, field_name in endpoints.items():
+            for value in invalid_values:
+                point = {"period": "2026-08-01", "ratio": 50}
+                if endpoint in DATALAB_GROUPED_ENDPOINTS:
+                    point["group"] = "mo"
+                payload = {
+                    "results": [
+                        {
+                            "title": "테스트",
+                            field_name: value,
+                            "data": [point],
+                        }
+                    ]
+                }
+                with (
+                    self.subTest(endpoint=endpoint, value=value),
+                    self.assertRaises(NaverAPIError),
+                ):
+                    NaverClient._validate_response_payload(endpoint, payload)
+
+    def test_optional_datalab_array_metadata_is_validated_when_present(self) -> None:
+        payload = {
+            "results": [
+                {
+                    "title": "정장",
+                    "keyword": ["정장"],
+                    "category": {"unexpected": "50000000"},
+                    "data": [{"period": "2026-08-01", "ratio": 50}],
+                }
+            ]
+        }
+
+        with self.assertRaises(NaverAPIError):
+            NaverClient._validate_response_payload(
+                "shopping/v1/category/keywords",
+                payload,
+            )
 
     def test_default_transport_replaces_invalid_utf8_bytes(self) -> None:
         response = mock.MagicMock()

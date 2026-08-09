@@ -430,6 +430,22 @@ class SearchToolsTest(unittest.TestCase):
         self.assertTrue(result["meta"]["fallback"])
         self.assertEqual(result["meta"]["fallback_reason"], "source_api_retired")
 
+    def test_search_naver_auto_matches_single_character_hints_as_tokens(self) -> None:
+        cases = [
+            ("개인정보 정책", "general_web"),
+            ("정책_자료", "general_web"),
+            ("대책 마련", "general_web"),
+            ("번역 라이브러리", "general_web"),
+            ("역사 자료", "general_web"),
+            ("책 추천", "book_search"),
+            ("역 주변", "place_search"),
+            ("서울역 맛집", "place_search"),
+        ]
+
+        for query, expected in cases:
+            with self.subTest(query=query):
+                self.assertEqual(self.tools._detect_auto_intent(query), expected)
+
     def test_search_naver_auto_routes_valid_isbn(self) -> None:
         result = self.tools.search_naver_auto(query="978-0-13-235088-4", display=5)
 

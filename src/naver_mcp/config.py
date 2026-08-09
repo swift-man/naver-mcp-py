@@ -7,6 +7,7 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
+from .cache import MAX_CACHE_TTL_SEC
 from .errors import ValidationError
 
 DEFAULT_API_BASE_URL = "https://naverapihub.apigw.ntruss.com"
@@ -142,9 +143,13 @@ class NaverMCPConfig:
         if isinstance(self.cache_ttl_sec, bool) or not isinstance(
             self.cache_ttl_sec, int
         ):
-            raise ValidationError("cache_ttl_sec must be a non-negative integer")
-        if self.cache_ttl_sec < 0:
-            raise ValidationError("cache_ttl_sec must be a non-negative integer")
+            raise ValidationError(
+                f"cache_ttl_sec must be an integer between 0 and {MAX_CACHE_TTL_SEC}"
+            )
+        if not 0 <= self.cache_ttl_sec <= MAX_CACHE_TTL_SEC:
+            raise ValidationError(
+                f"cache_ttl_sec must be an integer between 0 and {MAX_CACHE_TTL_SEC}"
+            )
 
         timeout = self.http_timeout_sec
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):

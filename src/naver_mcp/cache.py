@@ -8,6 +8,15 @@ from threading import RLock
 from typing import Any, Callable, Optional
 
 DEFAULT_CACHE_MAX_ENTRIES = 1024
+MAX_CACHE_TTL_SEC = 31_536_000
+
+
+def _validate_ttl(ttl_sec: object) -> int:
+    if isinstance(ttl_sec, bool) or not isinstance(ttl_sec, int):
+        raise ValueError("ttl_sec must be an integer between 0 and 31536000")
+    if not 0 <= ttl_sec <= MAX_CACHE_TTL_SEC:
+        raise ValueError("ttl_sec must be an integer between 0 and 31536000")
+    return ttl_sec
 
 
 @dataclass
@@ -27,7 +36,7 @@ class TTLCache:
             raise ValueError("max_entries must be a positive integer")
         if max_entries <= 0:
             raise ValueError("max_entries must be a positive integer")
-        self.default_ttl_sec = default_ttl_sec
+        self.default_ttl_sec = _validate_ttl(default_ttl_sec)
         self._now_fn = now_fn or time.monotonic
         self._max_entries = max_entries
         self._store: OrderedDict[str, _CacheEntry] = OrderedDict()
@@ -52,7 +61,9 @@ class TTLCache:
             return copy.deepcopy(entry.value)
 
     def set(self, key: str, value: Any, ttl_sec: Optional[int] = None) -> None:
-        ttl = ttl_sec if ttl_sec is not None else self.default_ttl_sec
+        ttl = _validate_ttl(
+            ttl_sec if ttl_sec is not None else self.default_ttl_sec
+        )
         with self._lock:
             now = self._now_fn()
             self._prune_expired(now)

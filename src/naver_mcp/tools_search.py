@@ -391,21 +391,33 @@ class SearchTools:
     def _detect_auto_intent(self, query: str) -> str:
         # 어떤 규칙에 걸렸는지 추론 가능해야 하므로 단순한 우선순위 규칙으로 intent를 정한다.
         lowered = query.lower()
-        if any(keyword in lowered for keyword in self.NEWS_HINTS):
+        if self._contains_auto_hint(lowered, self.NEWS_HINTS):
             return "news_search"
-        if any(keyword in lowered for keyword in self.BOOK_HINTS) or self._contains_valid_isbn(
-            query
-        ):
+        if self._contains_auto_hint(
+            lowered, self.BOOK_HINTS
+        ) or self._contains_valid_isbn(query):
             return "book_search"
-        if any(keyword in lowered for keyword in self.SHOP_HINTS):
+        if self._contains_auto_hint(lowered, self.SHOP_HINTS):
             return "shopping_search"
         if "카페글" in lowered or "네이버카페" in lowered or "cafearticle" in lowered:
             return "community_search"
-        if any(keyword in lowered for keyword in self.PLACE_HINTS):
+        if self._contains_auto_hint(lowered, self.PLACE_HINTS):
             return "place_search"
-        if any(keyword in lowered for keyword in self.COMMUNITY_HINTS):
+        if self._contains_auto_hint(lowered, self.COMMUNITY_HINTS):
             return "community_search"
         return "general_web"
+
+    @staticmethod
+    def _contains_auto_hint(query: str, hints: tuple[str, ...]) -> bool:
+        for hint in hints:
+            if len(hint) > 1 and hint in query:
+                return True
+            if len(hint) == 1 and re.search(
+                rf"(?<!\w){re.escape(hint)}(?!\w)",
+                query,
+            ):
+                return True
+        return False
 
     def _build_auto_plan(
         self,

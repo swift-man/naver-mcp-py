@@ -59,6 +59,13 @@ DATALAB_KEYWORD_ENDPOINTS = {
     "shopping/v1/category/keyword/gender",
     "shopping/v1/category/keyword/age",
 }
+DATALAB_CATEGORY_ENDPOINTS = {
+    "shopping/v1/categories",
+    "shopping/v1/category/device",
+    "shopping/v1/category/gender",
+    "shopping/v1/category/age",
+}
+DATALAB_SEARCH_TREND_ENDPOINT = "search-trend/v1/search"
 
 
 def _url_origin(url: str) -> Optional[tuple[str, str, int]]:
@@ -359,18 +366,37 @@ class NaverClient:
             for result in results:
                 if not isinstance(result, Mapping):
                     raise NaverAPIError("Naver API returned invalid DataLab result")
-                if endpoint in DATALAB_KEYWORD_ENDPOINTS:
-                    keywords = result.get("keyword")
+                title = result.get("title")
+                if not isinstance(title, str) or not title.strip():
+                    raise NaverAPIError("Naver API returned invalid DataLab title")
+
+                required_metadata = None
+                if endpoint == DATALAB_SEARCH_TREND_ENDPOINT:
+                    required_metadata = "keywords"
+                elif endpoint in DATALAB_CATEGORY_ENDPOINTS:
+                    required_metadata = "category"
+                elif endpoint in DATALAB_KEYWORD_ENDPOINTS:
+                    required_metadata = "keyword"
+
+                # 공식 응답 배열은 필수 필드뿐 아니라 선택적으로 포함된 경우도 검증한다.
+                for field_name in ("keywords", "keyword", "category"):
+                    if field_name not in result:
+                        if field_name == required_metadata:
+                            raise NaverAPIError(
+                                f"Naver API response is missing DataLab {field_name}"
+                            )
+                        continue
+                    values = result[field_name]
                     if (
-                        not isinstance(keywords, list)
-                        or not keywords
+                        not isinstance(values, list)
+                        or not values
                         or any(
-                            not isinstance(keyword, str) or not keyword.strip()
-                            for keyword in keywords
+                            not isinstance(value, str) or not value.strip()
+                            for value in values
                         )
                     ):
                         raise NaverAPIError(
-                            "Naver API returned invalid DataLab keywords"
+                            f"Naver API returned invalid DataLab {field_name}"
                         )
                 if "data" not in result:
                     raise NaverAPIError("Naver API response is missing DataLab data")

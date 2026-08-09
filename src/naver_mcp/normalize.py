@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 import html
 import re
+from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Mapping, Optional
@@ -303,34 +303,33 @@ def _normalize_datalab_response(
                 normalized_point["group"] = str(group)
             data_points.append(normalized_point)
 
+        title = result.get("title")
         normalized_result: dict[str, Any] = {
-            "title": str(result.get("title") or ""),
+            "title": title.strip() if isinstance(title, str) else "",
             "data": data_points,
         }
 
         keywords = result.get("keywords")
         if keywords is None:
             keywords = result.get("keyword")
-        if isinstance(keywords, Iterable) and not isinstance(
-            keywords, (str, bytes, bytearray)
-        ):
+        if isinstance(keywords, list):
             normalized_keywords = [
-                str(keyword).strip() for keyword in keywords if str(keyword).strip()
+                keyword.strip()
+                for keyword in keywords
+                if isinstance(keyword, str) and keyword.strip()
             ]
             if normalized_keywords:
                 normalized_result["keywords"] = normalized_keywords
-        elif keywords is not None and str(keywords).strip():
-            normalized_result["keywords"] = [str(keywords).strip()]
 
         category = result.get("category")
-        if isinstance(category, Iterable) and not isinstance(
-            category, (str, bytes, bytearray)
-        ):
-            normalized_result["category"] = [
-                str(value) for value in category if str(value).strip()
+        if isinstance(category, list):
+            normalized_category = [
+                value.strip()
+                for value in category
+                if isinstance(value, str) and value.strip()
             ]
-        elif category is not None and str(category).strip():
-            normalized_result["category"] = [str(category)]
+            if normalized_category:
+                normalized_result["category"] = normalized_category
 
         results.append(normalized_result)
 
