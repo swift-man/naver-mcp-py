@@ -333,12 +333,15 @@ def _normalize_datalab_response(
 
         results.append(normalized_result)
 
+    start_date = payload.get("startDate")
+    end_date = payload.get("endDate")
+    time_unit = payload.get("timeUnit")
     return {
         "results": results,
         "meta": {
-            "start_date": str(payload.get("startDate") or ""),
-            "end_date": str(payload.get("endDate") or ""),
-            "time_unit": str(payload.get("timeUnit") or ""),
+            "start_date": start_date if isinstance(start_date, str) else "",
+            "end_date": end_date if isinstance(end_date, str) else "",
+            "time_unit": time_unit if isinstance(time_unit, str) else "",
             "cached": cached,
         },
     }

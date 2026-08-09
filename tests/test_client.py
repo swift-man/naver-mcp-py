@@ -51,6 +51,15 @@ from naver_mcp.models import (
 )
 
 
+def _datalab_response(results: Any) -> dict[str, Any]:
+    return {
+        "startDate": "2026-08-01",
+        "endDate": "2026-08-08",
+        "timeUnit": "date",
+        "results": results,
+    }
+
+
 class RecordingTransport:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
@@ -79,7 +88,13 @@ class RecordingTransport:
         }:
             return {"items": []}
         if path.startswith(("/search-trend/v1/", "/shopping/v1/")):
-            return {"results": []}
+            request_payload = json.loads(body or b"{}")
+            return {
+                "startDate": request_payload["startDate"],
+                "endDate": request_payload["endDate"],
+                "timeUnit": request_payload["timeUnit"],
+                "results": [],
+            }
         if path == "/search/v1/errata":
             return {"errata": ""}
         if path == "/search/v1/adult":
@@ -562,20 +577,20 @@ class NaverClientTest(unittest.TestCase):
         )
 
         def search_trend_payload(data: Any) -> dict[str, Any]:
-            return {
-                "results": [
+            return _datalab_response(
+                [
                     {
                         "title": "파이썬",
                         "keywords": ["파이썬"],
                         "data": data,
                     }
                 ]
-            }
+            )
 
         payloads = [
             {},
-            {"results": [None]},
-            {"results": [{}]},
+            _datalab_response([None]),
+            _datalab_response([{}]),
             search_trend_payload(None),
             search_trend_payload([None]),
             search_trend_payload([{"ratio": 1}]),
@@ -594,6 +609,8 @@ class NaverClientTest(unittest.TestCase):
             search_trend_payload([{"period": "2026-08-01", "ratio": 10**400}]),
             search_trend_payload([{"period": "2026-08-01", "ratio": -1}]),
             search_trend_payload([{"period": "2026-08-01", "ratio": 100.1}]),
+            search_trend_payload([{"period": "2026-8-1", "ratio": 50}]),
+            search_trend_payload([{"period": "2026-02-30", "ratio": 50}]),
         ]
 
         for payload in payloads:
@@ -614,15 +631,15 @@ class NaverClientTest(unittest.TestCase):
         )
 
         for ratio in (0, 100):
-            response = {
-                "results": [
+            response = _datalab_response(
+                [
                     {
                         "title": "파이썬",
                         "keywords": ["파이썬"],
                         "data": [{"period": "2026-08-01", "ratio": ratio}],
                     }
                 ]
-            }
+            )
             with self.subTest(ratio=ratio):
                 client = NaverClient(
                     self.config,
@@ -655,8 +672,8 @@ class NaverClientTest(unittest.TestCase):
             else:
                 metadata["category"] = ["50000000"]
             for group in invalid_groups:
-                payload = {
-                    "results": [
+                payload = _datalab_response(
+                    [
                         {
                             **metadata,
                             "data": [
@@ -668,21 +685,21 @@ class NaverClientTest(unittest.TestCase):
                             ]
                         }
                     ]
-                }
+                )
                 with (
                     self.subTest(endpoint=endpoint, group=group),
                     self.assertRaises(NaverAPIError),
                 ):
                     NaverClient._validate_response_payload(endpoint, payload)
 
-            missing_group = {
-                "results": [
+            missing_group = _datalab_response(
+                [
                     {
                         **metadata,
                         "data": [{"period": "2026-08-01", "ratio": 50}],
                     }
                 ]
-            }
+            )
             with self.subTest(endpoint=endpoint), self.assertRaises(NaverAPIError):
                 NaverClient._validate_response_payload(endpoint, missing_group)
 
@@ -702,7 +719,7 @@ class NaverClientTest(unittest.TestCase):
                 result["category"] = ["50000000"]
             else:
                 result["keyword"] = ["정장"]
-            payload = {"results": [result]}
+            payload = _datalab_response([result])
             with self.subTest(endpoint=endpoint):
                 self.assertEqual(
                     NaverClient._validate_response_payload(endpoint, payload),
@@ -723,15 +740,15 @@ class NaverClientTest(unittest.TestCase):
                 point = {"period": "2026-08-01", "ratio": 50}
                 if endpoint != "shopping/v1/category/keywords":
                     point["group"] = "mo"
-                payload = {
-                    "results": [
+                payload = _datalab_response(
+                    [
                         {
                             "title": "정장",
                             "keyword": keywords,
                             "data": [point],
                         }
                     ]
-                }
+                )
                 with (
                     self.subTest(endpoint=endpoint, keywords=keywords),
                     self.assertRaises(NaverAPIError),
@@ -746,17 +763,21 @@ class NaverClientTest(unittest.TestCase):
             "shopping/v1/category/keyword/age",
         ):
             point = {"period": "2026-08-01", "ratio": 50}
-            if endpoint != "shopping/v1/category/keywords":
+            if endpoint.endswith("/device"):
                 point["group"] = "mo"
-            payload = {
-                "results": [
+            elif endpoint.endswith("/gender"):
+                point["group"] = "f"
+            elif endpoint.endswith("/age"):
+                point["group"] = "20"
+            payload = _datalab_response(
+                [
                     {
                         "title": "정장",
                         "keyword": ["정장"],
                         "data": [point],
                     }
                 ]
-            }
+            )
             with self.subTest(endpoint=endpoint):
                 self.assertEqual(
                     NaverClient._validate_response_payload(endpoint, payload),
@@ -778,7 +799,7 @@ class NaverClientTest(unittest.TestCase):
 
         for endpoint in endpoints:
             for title in (None, 10, {}, "   "):
-                payload = {"results": [{"title": title, "data": []}]}
+                payload = _datalab_response([{"title": title, "data": []}])
                 with (
                     self.subTest(endpoint=endpoint, title=title),
                     self.assertRaises(NaverAPIError),
@@ -800,15 +821,15 @@ class NaverClientTest(unittest.TestCase):
                 point = {"period": "2026-08-01", "ratio": 50}
                 if endpoint in DATALAB_GROUPED_ENDPOINTS:
                     point["group"] = "mo"
-                payload = {
-                    "results": [
+                payload = _datalab_response(
+                    [
                         {
                             "title": "테스트",
                             field_name: value,
                             "data": [point],
                         }
                     ]
-                }
+                )
                 with (
                     self.subTest(endpoint=endpoint, value=value),
                     self.assertRaises(NaverAPIError),
@@ -816,8 +837,8 @@ class NaverClientTest(unittest.TestCase):
                     NaverClient._validate_response_payload(endpoint, payload)
 
     def test_optional_datalab_array_metadata_is_validated_when_present(self) -> None:
-        payload = {
-            "results": [
+        payload = _datalab_response(
+            [
                 {
                     "title": "정장",
                     "keyword": ["정장"],
@@ -825,11 +846,118 @@ class NaverClientTest(unittest.TestCase):
                     "data": [{"period": "2026-08-01", "ratio": 50}],
                 }
             ]
-        }
+        )
 
         with self.assertRaises(NaverAPIError):
             NaverClient._validate_response_payload(
                 "shopping/v1/category/keywords",
+                payload,
+            )
+
+    def test_datalab_top_level_metadata_is_validated(self) -> None:
+        valid = _datalab_response([])
+        invalid_payloads = []
+        for field_name in ("startDate", "endDate", "timeUnit"):
+            missing = dict(valid)
+            missing.pop(field_name)
+            invalid_payloads.append(missing)
+        invalid_payloads.extend(
+            [
+                {**valid, "startDate": None},
+                {**valid, "startDate": {}},
+                {**valid, "startDate": "2026-8-1"},
+                {**valid, "startDate": "2026-02-30"},
+                {**valid, "startDate": "2026-08-09"},
+                {**valid, "endDate": 20260808},
+                {**valid, "endDate": "2026-08-8"},
+                {**valid, "timeUnit": {}},
+                {**valid, "timeUnit": "year"},
+            ]
+        )
+
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload), self.assertRaises(NaverAPIError):
+                NaverClient._validate_response_payload(
+                    "search-trend/v1/search",
+                    payload,
+                )
+
+        self.assertEqual(
+            NaverClient._validate_response_payload(
+                "search-trend/v1/search",
+                valid,
+            ),
+            valid,
+        )
+
+    def test_grouped_datalab_endpoints_validate_documented_group_values(self) -> None:
+        endpoints = {
+            "shopping/v1/category/device": ("pc", "tablet"),
+            "shopping/v1/category/gender": ("m", "unknown"),
+            "shopping/v1/category/age": ("20", "70"),
+            "shopping/v1/category/keyword/device": ("mo", "tablet"),
+            "shopping/v1/category/keyword/gender": ("f", "unknown"),
+            "shopping/v1/category/keyword/age": ("60", "70"),
+        }
+
+        for endpoint, (valid_group, invalid_group) in endpoints.items():
+            metadata = {"title": "테스트"}
+            if "/keyword/" in endpoint:
+                metadata["keyword"] = ["정장"]
+            else:
+                metadata["category"] = ["50000000"]
+
+            def response(group: str) -> dict[str, Any]:
+                return _datalab_response(
+                    [
+                        {
+                            **metadata,
+                            "data": [
+                                {
+                                    "period": "2026-08-01",
+                                    "group": group,
+                                    "ratio": 50,
+                                }
+                            ],
+                        }
+                    ]
+                )
+
+            valid_payload = response(valid_group)
+            with self.subTest(endpoint=endpoint, group=valid_group):
+                self.assertEqual(
+                    NaverClient._validate_response_payload(endpoint, valid_payload),
+                    valid_payload,
+                )
+            with (
+                self.subTest(endpoint=endpoint, group=invalid_group),
+                self.assertRaises(NaverAPIError),
+            ):
+                NaverClient._validate_response_payload(
+                    endpoint,
+                    response(invalid_group),
+                )
+
+    def test_aggregate_datalab_endpoints_reject_unexpected_group(self) -> None:
+        payload = _datalab_response(
+            [
+                {
+                    "title": "파이썬",
+                    "keywords": ["파이썬"],
+                    "data": [
+                        {
+                            "period": "2026-08-01",
+                            "group": "pc",
+                            "ratio": 50,
+                        }
+                    ],
+                }
+            ]
+        )
+
+        with self.assertRaises(NaverAPIError):
+            NaverClient._validate_response_payload(
+                "search-trend/v1/search",
                 payload,
             )
 

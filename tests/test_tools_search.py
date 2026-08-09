@@ -436,9 +436,17 @@ class SearchToolsTest(unittest.TestCase):
             ("정책_자료", "general_web"),
             ("대책 마련", "general_web"),
             ("번역 라이브러리", "general_web"),
+            ("기계번역", "general_web"),
             ("역사 자료", "general_web"),
+            ("수도권 지역", "general_web"),
+            ("독감 방역", "general_web"),
             ("책 추천", "book_search"),
             ("역 주변", "place_search"),
+            ("서울역", "place_search"),
+            ("판교역", "place_search"),
+            ("대구역", "place_search"),
+            ("삼성역", "place_search"),
+            ("관악역", "place_search"),
             ("서울역 맛집", "place_search"),
         ]
 
@@ -452,9 +460,17 @@ class SearchToolsTest(unittest.TestCase):
         self.assertEqual(result["intent"], "book_search")
 
     def test_search_naver_auto_does_not_treat_phone_number_as_isbn(self) -> None:
-        result = self.tools.search_naver_auto(query="010" + "1234" + "5678", display=5)
+        phone_numbers = ["010" + "1234" + "5678", "02-1234-5672"]
 
-        self.assertEqual(result["intent"], "general_web")
+        for query in phone_numbers:
+            with self.subTest(query=query):
+                result = self.tools.search_naver_auto(query=query, display=5)
+                self.assertEqual(result["intent"], "general_web")
+
+    def test_search_naver_auto_routes_labeled_isbn_10(self) -> None:
+        result = self.tools.search_naver_auto(query="ISBN 0-13-235088-2", display=5)
+
+        self.assertEqual(result["intent"], "book_search")
 
     def test_search_naver_auto_routes_shopping_queries_to_fallback(self) -> None:
         result = self.tools.search_naver_auto(query="무선 이어폰 최저가", display=5)

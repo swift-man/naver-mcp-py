@@ -382,6 +382,10 @@ Current merge policy:
 - `shopping_search` -> `web` then `blog`, with `meta.fallback: true`
 - `community_search` -> `blog` then `cafearticle`
 - `general_web` -> `web` then `blog`
+- a checksum-valid `978`/`979` ISBN-13 selects `book_search`; ISBN-10 requires
+  an explicit `ISBN` hint because an unlabeled 10-digit value can be a phone number
+- a standalone `역` or station-name suffix such as `서울역` selects `place_search`;
+  common non-place words and language-processing suffixes such as `번역` are excluded
 - duplicate items are removed using `originallink`, then `link`, then `source:title`
 - `score` is assigned deterministically from source priority and within-source rank
 
@@ -420,7 +424,12 @@ Notes:
 - `keywords` appears for search trends and shopping keyword tools; the upstream
   shopping `keyword` array is normalized element by element into this field
 - `group` appears only for breakdown tools such as device, gender, or age
+- device groups are `pc` or `mo`, gender groups are `m` or `f`, and shopping
+  age groups are `10`, `20`, `30`, `40`, `50`, or `60`
 - `ratio` is a finite number from `0` through `100`
+- top-level `startDate` and `endDate` are canonical `YYYY-MM-DD` values in
+  ascending order, `timeUnit` is `date`, `week`, or `month`, and every data
+  point period is a canonical `YYYY-MM-DD` value
 - every result object must include a `data` array; a missing field is an upstream contract error, not an empty trend
 
 ### `datalab_search_trends`

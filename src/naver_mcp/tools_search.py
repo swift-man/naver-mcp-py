@@ -123,8 +123,50 @@ class SearchTools:
     )
     BOOK_HINTS = ("책", "도서", "서적", "isbn", "작가", "출판사")
     SHOP_HINTS = ("최저가", "가격", "구매", "할인", "쇼핑", "상품", "판매")
-    ISBN_CANDIDATE_RE = re.compile(
-        r"(?<!\w)(?:97[89](?:[-\s]?\d){10}|(?:\d[-\s]?){9}[\dXx])(?!\w)"
+    ISBN_CANDIDATE_RE = re.compile(r"(?<!\w)97[89](?:[-\s]?\d){10}(?!\w)")
+    STATION_NAME_RE = re.compile(r"(?<!\w)([0-9A-Za-z가-힣]{2,20}역)(?!\w)")
+    NON_STATION_WORDS = frozenset(
+        {
+            "번역",
+            "통역",
+            "직역",
+            "의역",
+            "음역",
+            "무역",
+            "교역",
+            "구역",
+            "권역",
+            "광역",
+            "지역",
+            "영역",
+            "수역",
+            "해역",
+            "방역",
+            "검역",
+            "병역",
+            "징역",
+            "현역",
+            "전역",
+            "배역",
+            "대역",
+            "용역",
+            "노역",
+            "성역",
+            "악역",
+            "주역",
+            "단역",
+            "조역",
+            "고역",
+            "중역",
+        }
+    )
+    NON_STATION_SUFFIXES = (
+        "번역",
+        "통역",
+        "직역",
+        "의역",
+        "음역",
+        "무역",
     )
 
     def __init__(
@@ -401,7 +443,10 @@ class SearchTools:
             return "shopping_search"
         if "카페글" in lowered or "네이버카페" in lowered or "cafearticle" in lowered:
             return "community_search"
-        if self._contains_auto_hint(lowered, self.PLACE_HINTS):
+        if self._contains_auto_hint(
+            lowered,
+            self.PLACE_HINTS,
+        ) or self._contains_station_name(lowered):
             return "place_search"
         if self._contains_auto_hint(lowered, self.COMMUNITY_HINTS):
             return "community_search"
@@ -415,6 +460,16 @@ class SearchTools:
             if len(hint) == 1 and re.search(
                 rf"(?<!\w){re.escape(hint)}(?!\w)",
                 query,
+            ):
+                return True
+        return False
+
+    @classmethod
+    def _contains_station_name(cls, query: str) -> bool:
+        for match in cls.STATION_NAME_RE.finditer(query):
+            token = match.group(1)
+            if token not in cls.NON_STATION_WORDS and not token.endswith(
+                cls.NON_STATION_SUFFIXES
             ):
                 return True
         return False
@@ -534,20 +589,15 @@ class SearchTools:
 
     @classmethod
     def _contains_valid_isbn(cls, query: str) -> bool:
-        # 숫자 길이만 보지 않고 ISBN 체크섬까지 확인해 전화번호와 주문번호 오분류를 줄인다.
+        # 라벨 없는 ISBN-10은 10자리 전화번호와 충돌하므로 978/979 ISBN-13만 자동 감지한다.
         for match in cls.ISBN_CANDIDATE_RE.finditer(query):
-            candidate = re.sub(r"[-\s]", "", match.group(0)).upper()
-            if len(candidate) == 10:
-                digits = [10 if value == "X" else int(value) for value in candidate]
-                if sum((10 - index) * value for index, value in enumerate(digits)) % 11 == 0:
-                    return True
-            elif len(candidate) == 13:
-                checksum = sum(
-                    int(value) * (1 if index % 2 == 0 else 3)
-                    for index, value in enumerate(candidate[:12])
-                )
-                if (10 - checksum % 10) % 10 == int(candidate[-1]):
-                    return True
+            candidate = re.sub(r"[-\s]", "", match.group(0))
+            checksum = sum(
+                int(value) * (1 if index % 2 == 0 else 3)
+                for index, value in enumerate(candidate[:12])
+            )
+            if (10 - checksum % 10) % 10 == int(candidate[-1]):
+                return True
         return False
 
     def _merge_auto_results(

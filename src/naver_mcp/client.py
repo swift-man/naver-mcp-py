@@ -8,6 +8,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 from typing import Any, Callable, Mapping, NoReturn, Optional
 
 from .config import NaverMCPConfig
@@ -66,6 +67,29 @@ DATALAB_CATEGORY_ENDPOINTS = {
     "shopping/v1/category/age",
 }
 DATALAB_SEARCH_TREND_ENDPOINT = "search-trend/v1/search"
+DATALAB_TIME_UNITS = {"date", "week", "month"}
+DATALAB_GROUP_VALUES_BY_ENDPOINT = {
+    "shopping/v1/category/device": {"pc", "mo"},
+    "shopping/v1/category/gender": {"m", "f"},
+    "shopping/v1/category/age": {"10", "20", "30", "40", "50", "60"},
+    "shopping/v1/category/keyword/device": {"pc", "mo"},
+    "shopping/v1/category/keyword/gender": {"m", "f"},
+    "shopping/v1/category/keyword/age": {"10", "20", "30", "40", "50", "60"},
+}
+
+
+def _validate_datalab_response_date(value: object, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise NaverAPIError(f"Naver API returned invalid DataLab {field_name}")
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as exc:
+        raise NaverAPIError(
+            f"Naver API returned invalid DataLab {field_name}"
+        ) from exc
+    if parsed.strftime("%Y-%m-%d") != value:
+        raise NaverAPIError(f"Naver API returned invalid DataLab {field_name}")
+    return value
 
 
 def _url_origin(url: str) -> Optional[tuple[str, str, int]]:
@@ -363,6 +387,21 @@ class NaverClient:
             results = payload["results"]
             if not isinstance(results, list):
                 raise NaverAPIError("Naver API returned invalid DataLab results")
+
+            start_date = _validate_datalab_response_date(
+                payload.get("startDate"),
+                "startDate",
+            )
+            end_date = _validate_datalab_response_date(
+                payload.get("endDate"),
+                "endDate",
+            )
+            if start_date > end_date:
+                raise NaverAPIError("Naver API returned invalid DataLab date range")
+            time_unit = payload.get("timeUnit")
+            if not isinstance(time_unit, str) or time_unit not in DATALAB_TIME_UNITS:
+                raise NaverAPIError("Naver API returned invalid DataLab timeUnit")
+
             for result in results:
                 if not isinstance(result, Mapping):
                     raise NaverAPIError("Naver API returned invalid DataLab result")
@@ -406,13 +445,17 @@ class NaverClient:
                 for point in data:
                     if not isinstance(point, Mapping):
                         raise NaverAPIError("Naver API returned invalid DataLab data point")
-                    period = point.get("period")
-                    if not isinstance(period, str) or not period.strip():
-                        raise NaverAPIError("Naver API returned invalid DataLab period")
-                    if endpoint in DATALAB_GROUPED_ENDPOINTS or "group" in point:
+                    _validate_datalab_response_date(
+                        point.get("period"),
+                        "period",
+                    )
+                    if endpoint in DATALAB_GROUPED_ENDPOINTS:
+                        allowed_groups = DATALAB_GROUP_VALUES_BY_ENDPOINT[endpoint]
                         group = point.get("group")
-                        if not isinstance(group, str) or not group.strip():
+                        if not isinstance(group, str) or group not in allowed_groups:
                             raise NaverAPIError("Naver API returned invalid DataLab group")
+                    elif "group" in point:
+                        raise NaverAPIError("Naver API returned unexpected DataLab group")
                     ratio = point.get("ratio")
                     if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
                         raise NaverAPIError("Naver API returned invalid DataLab ratio")

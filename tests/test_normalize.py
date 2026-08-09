@@ -197,6 +197,9 @@ class NormalizeTest(unittest.TestCase):
 
     def test_normalize_datalab_does_not_stringify_invalid_metadata(self) -> None:
         payload = {
+            "startDate": {"unexpected": "start"},
+            "endDate": 20260808,
+            "timeUnit": ["date"],
             "results": [
                 {
                     "title": {"unexpected": "title"},
@@ -212,6 +215,9 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual(result["results"][0]["title"], "")
         self.assertNotIn("keywords", result["results"][0])
         self.assertNotIn("category", result["results"][0])
+        self.assertEqual(result["meta"]["start_date"], "")
+        self.assertEqual(result["meta"]["end_date"], "")
+        self.assertEqual(result["meta"]["time_unit"], "")
 
 
 if __name__ == "__main__":

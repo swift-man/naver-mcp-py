@@ -9,8 +9,8 @@ from .config import NaverMCPConfig
 from .errors import ValidationError
 from .models import (
     DataLabCategoryGroup,
-    DataLabSearchTrendsRequest,
     DataLabKeywordGroup,
+    DataLabSearchTrendsRequest,
     DataLabShoppingCategoryDetailRequest,
     DataLabShoppingCategoryTrendsRequest,
     DataLabShoppingKeywordDetailRequest,
