@@ -2,7 +2,7 @@
 
 ## Overview
 
-`naver-mcp-py` is a dedicated Python repository that exposes Naver Search API and DataLab as MCP tools.
+`naver-mcp-py` is a dedicated Python repository that exposes NAVER API HUB Search, Search Trend, and Shopping Insight APIs as MCP tools.
 
 The repository supports two modes:
 
@@ -29,8 +29,10 @@ flowchart LR
     A["Chat App"] --> B["App Router or Orchestrator"]
     B --> C["naver-mcp-py"]
     B --> D["other MCP servers"]
-    C --> E["Naver Search API"]
-    C --> F["Naver DataLab API"]
+    C --> E["NAVER API HUB"]
+    E --> F["Search"]
+    E --> G["Search Trend"]
+    E --> H["Shopping Insight"]
 ```
 
 ## Repository Responsibilities
@@ -74,7 +76,8 @@ Owns raw HTTP calls to Naver APIs.
 
 Responsibilities:
 
-- build request headers
+- build `X-NCP-APIGW-API-KEY-ID` and `X-NCP-APIGW-API-KEY` headers
+- map tool calls to `/search/v1`, `/search-trend/v1`, and `/shopping/v1` endpoints
 - send HTTP requests
 - handle status codes
 - map transport failures into structured exceptions
@@ -102,9 +105,21 @@ Implemented tools:
 - `search_web`
 - `search_news`
 - `search_cafearticle`
+- `search_image`
+- `search_encyc`
+- `search_kin`
 - `spell_check`
 - `detect_adult_query`
 - `search_naver_auto`
+
+Compatibility-only retired tools:
+
+- `search_book`
+- `search_book_advanced`
+- `search_shop`
+- `search_doc`
+
+The retired tools raise `NAVER_SERVICE_UNAVAILABLE` without a network request because Naver ended the underlying APIs on 2026-07-31.
 
 ### `tools_datalab.py`
 
@@ -114,6 +129,13 @@ Implemented tools:
 
 - `datalab_search_trends`
 - `datalab_shopping_category_trends`
+- `datalab_shopping_category_device_trends`
+- `datalab_shopping_category_gender_trends`
+- `datalab_shopping_category_age_trends`
+- `datalab_shopping_keyword_trends`
+- `datalab_shopping_keyword_device_trends`
+- `datalab_shopping_keyword_gender_trends`
+- `datalab_shopping_keyword_age_trends`
 - `datalab_shopping_device_trends`
 
 ### `server.py`
@@ -156,7 +178,7 @@ All search tools try to emit:
   "title": "normalized title",
   "link": "https://...",
   "snippet": "normalized description",
-  "source": "local|blog|web|news|cafearticle",
+  "source": "local|blog|web|news|cafearticle|image|encyc|kin",
   "published_at": "2026-03-18T12:00:00+09:00",
   "score": 0.0
 }
@@ -173,6 +195,8 @@ Source-specific fields are added without breaking the common shape.
 - keep merge rules simple and documented
 
 Composite tools are helpers. Low-level tools remain first-class.
+
+Book and shopping intents use `web` and `blog` fallback sources because the dedicated upstream APIs no longer exist. The response includes `meta.fallback` and `meta.fallback_reason` so clients can distinguish fallback results.
 
 ## Reliability Policy
 
@@ -213,4 +237,3 @@ Examples:
 - answers requiring internal data plus public search data
 
 This repository should support both patterns cleanly.
-

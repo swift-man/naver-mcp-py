@@ -1,12 +1,13 @@
 # naver-mcp-py
 
-Python FastMCP server and reusable client library for Naver Search API and DataLab.
+Python FastMCP server and reusable client library for NAVER API HUB Search,
+Search Trend, and Shopping Insight APIs.
 
 The current codebase is designed to run cleanly on Linux servers with Python 3.9+ and uses the standard library HTTP stack for API calls.
 
 ## Goals
 
-- Expose Naver Search API and DataLab through MCP tools.
+- Expose NAVER API HUB Search and DataLab features through MCP tools.
 - Keep source normalization inside this repository.
 - Support both MCP server mode and direct Python library mode.
 - Provide a stable contract that app clients can depend on.
@@ -15,7 +16,7 @@ The current codebase is designed to run cleanly on Linux servers with Python 3.9
 
 This repository owns:
 
-- Naver Open API client code
+- NAVER API HUB client code
 - DataLab client code
 - Retry, timeout, cache, and validation
 - HTML stripping and normalized response schemas
@@ -31,7 +32,7 @@ This repository does not own:
 
 ## Implemented Tools
 
-Search tools:
+Supported search tools:
 
 - `search_local`
 - `search_blog`
@@ -39,15 +40,18 @@ Search tools:
 - `search_news`
 - `search_cafearticle`
 - `search_image`
-- `search_book`
-- `search_book_advanced`
 - `search_encyc`
 - `search_kin`
-- `search_shop`
-- `search_doc`
 - `spell_check`
 - `detect_adult_query`
 - `search_naver_auto`
+
+Retired upstream search tools kept for contract compatibility:
+
+- `search_book`
+- `search_book_advanced`
+- `search_shop`
+- `search_doc`
 
 DataLab tools:
 
@@ -65,13 +69,36 @@ DataLab tools:
 Notes:
 
 - `datalab_shopping_device_trends` is kept as a backward-compatible alias of `datalab_shopping_category_device_trends`
-- `search_book_advanced` wraps the Naver advanced book lookup and requires at least `title` or `isbn`
+- Naver ended book, shopping product, and professional document search on 2026-07-31 without replacement APIs
+- retired tools fail immediately with `NAVER_SERVICE_UNAVAILABLE` and do not make network requests
+- book and shopping intents in `search_naver_auto` fall back to web and blog search and disclose that fallback in `meta`
+
+## NAVER API HUB
+
+This project uses the NAVER API HUB endpoint and authentication scheme introduced in 2026:
+
+```text
+API URL: https://naverapihub.apigw.ntruss.com
+Client ID header: X-NCP-APIGW-API-KEY-ID
+Client Secret header: X-NCP-APIGW-API-KEY
+```
+
+Register an application under `Application Services > NAVER API HUB` and enable the APIs you need. Credentials issued for the separate AI NAVER API product may not have NAVER API HUB permissions.
+
+Official references:
+
+- [NAVER API HUB overview](https://api.ncloud-docs.com/docs/naver-api-hub-overview)
+- [Search API migration notice](https://developers.naver.com/notice/article/32530)
+- [Search keyword trends](https://api.ncloud-docs.com/docs/naver-api-hub-search-trend)
+- [Shopping Insight](https://api.ncloud-docs.com/docs/naver-api-hub-shopping-insight-categories)
 
 ## Project Layout
 
 ```text
 naver-mcp-py/
   README.md
+  CHANGELOG.md
+  VERSION.txt
   AGENTS.md
   pyproject.toml
   .env.example
@@ -91,7 +118,10 @@ naver-mcp-py/
     tools_datalab.py
     tools_search.py
   tests/
+    test_client.py
     test_normalize.py
+    test_server.py
+    test_smoke_live.py
     test_tools_datalab.py
     test_tools_search.py
 ```
@@ -99,8 +129,8 @@ naver-mcp-py/
 ## Requirements
 
 - Python 3.9+
-- Naver Search API credentials
-- Naver DataLab API access
+- NAVER API HUB Client ID and Client Secret
+- Search, Search Trend, and Shopping Insight permissions selected for the application
 - Linux server only if you plan to run it as a long-lived service
 
 ## Quick Start
@@ -132,8 +162,9 @@ pip install -e ".[server,dev]"
 
 Available environment variables:
 
-- `NAVER_CLIENT_ID`
-- `NAVER_CLIENT_SECRET`
+- `NAVER_API_HUB_CLIENT_ID`
+- `NAVER_API_HUB_CLIENT_SECRET`
+- `NAVER_API_BASE_URL` (optional; defaults to `https://naverapihub.apigw.ntruss.com`)
 - `NAVER_MCP_HOST`
 - `NAVER_MCP_PORT`
 - `NAVER_MCP_PATH`
@@ -146,15 +177,17 @@ On Linux servers, export the variables explicitly or load them through your proc
 
 Security note:
 
-- never commit real `NAVER_CLIENT_ID` or `NAVER_CLIENT_SECRET`
+- issue credentials from `Application Services > NAVER API HUB`, not the separate AI NAVER API application menu
+- never commit real `NAVER_API_HUB_CLIENT_ID` or `NAVER_API_HUB_CLIENT_SECRET`
 - keep real credentials only in private shell exports, `.env` files excluded by `.gitignore`, or `/etc/naver-mcp.env`
-- if a real key was ever pushed to a public repository, rotate it immediately in the Naver developer console
+- if a real key was ever pushed to a public repository, reissue it immediately in the NAVER Cloud Platform console
+- legacy `NAVER_CLIENT_ID` and `NAVER_CLIENT_SECRET` variable names remain accepted as aliases, but the values must be NAVER API HUB credentials
 
 Example:
 
 ```bash
-export NAVER_CLIENT_ID="your_client_id"
-export NAVER_CLIENT_SECRET="your_client_secret"
+export NAVER_API_HUB_CLIENT_ID="your_client_id"
+export NAVER_API_HUB_CLIENT_SECRET="your_client_secret"
 export NAVER_MCP_HOST="127.0.0.1"
 export NAVER_MCP_PORT="8100"
 export NAVER_MCP_PATH="/mcp"
@@ -185,8 +218,8 @@ python3 -m venv .venv
 .venv/bin/pip install -U pip
 .venv/bin/pip install -e ".[server]"
 
-export NAVER_CLIENT_ID="your_client_id"
-export NAVER_CLIENT_SECRET="your_client_secret"
+export NAVER_API_HUB_CLIENT_ID="your_client_id"
+export NAVER_API_HUB_CLIENT_SECRET="your_client_secret"
 export NAVER_MCP_HOST="127.0.0.1"
 export NAVER_MCP_PORT="8100"
 export NAVER_MCP_PATH="/mcp"
@@ -239,8 +272,8 @@ Create `/etc/naver-mcp.env`:
 
 ```bash
 sudo tee /etc/naver-mcp.env > /dev/null <<'EOF'
-NAVER_CLIENT_ID=your_client_id
-NAVER_CLIENT_SECRET=your_client_secret
+NAVER_API_HUB_CLIENT_ID=your_client_id
+NAVER_API_HUB_CLIENT_SECRET=your_client_secret
 NAVER_MCP_HOST=127.0.0.1
 NAVER_MCP_PORT=8100
 NAVER_MCP_PATH=/mcp
@@ -304,6 +337,18 @@ sudo systemctl status naver-mcp --no-pager
 journalctl -u naver-mcp -f
 ss -ltnp | grep 8100
 ```
+
+### Update an existing Linux deployment
+
+```bash
+cd /home/<USER>/naver-mcp-py
+git pull origin main
+.venv/bin/pip install -e ".[server]"
+sudo systemctl restart naver-mcp
+sudo systemctl status naver-mcp --no-pager
+```
+
+When migrating from the old Naver developer API, replace the credential entries in `/etc/naver-mcp.env` with `NAVER_API_HUB_CLIENT_ID` and `NAVER_API_HUB_CLIENT_SECRET` before restarting.
 
 ## MCP Client URL
 
@@ -399,6 +444,15 @@ PYTHONPYCACHEPREFIX=/tmp/naver-mcp-py-pyc python3 -m py_compile sitecustomize.py
 ```
 
 Prefer mock-based tests for API contracts and normalization. Keep live API checks optional.
+
+To run one real NAVER API HUB smoke test without exposing credentials in the repository:
+
+```bash
+export NAVER_LIVE_SMOKE_TEST=1
+export NAVER_API_HUB_CLIENT_ID="your_client_id"
+export NAVER_API_HUB_CLIENT_SECRET="your_client_secret"
+python3 -m unittest tests.test_smoke_live
+```
 
 ## Integration Model
 

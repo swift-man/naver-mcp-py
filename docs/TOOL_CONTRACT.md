@@ -23,6 +23,14 @@ Example endpoint:
 
 The actual path may change through `NAVER_MCP_PATH`. Clients must use the exact configured path.
 
+Upstream NAVER API HUB calls use:
+
+```text
+Base URL: https://naverapihub.apigw.ntruss.com
+Client ID: X-NCP-APIGW-API-KEY-ID
+Client Secret: X-NCP-APIGW-API-KEY
+```
+
 ## Common Search Response Shape
 
 Search tools return this shape whenever practical:
@@ -48,7 +56,7 @@ Search tools return this shape whenever practical:
   "title": "normalized title",
   "link": "https://...",
   "snippet": "normalized snippet",
-  "source": "local|blog|web|news|cafearticle|image|book|encyc|kin|shop|doc",
+  "source": "local|blog|web|news|cafearticle|image|encyc|kin",
   "published_at": "2026-03-18T12:00:00+09:00",
   "score": 0.0
 }
@@ -76,7 +84,7 @@ Notes:
 }
 ```
 
-### Blog, News, Web, Cafe, Kin, Doc
+### Blog, News, Web, Cafe, Kin
 
 ```json
 {
@@ -101,44 +109,12 @@ Only fields present in the source response are included.
 }
 ```
 
-### Book
-
-```json
-{
-  "image": "https://...",
-  "author": "author name",
-  "discount": "18000",
-  "publisher": "publisher name",
-  "isbn": "9781234567890",
-  "description": "book summary"
-}
-```
-
 ### Encyclopedia
 
 ```json
 {
   "thumbnail": "https://...",
   "description": "encyclopedia summary"
-}
-```
-
-### Shop
-
-```json
-{
-  "image": "https://...",
-  "low_price": "99000",
-  "high_price": "159000",
-  "mall_name": "mall",
-  "product_id": "123456",
-  "product_type": "2",
-  "brand": "brand",
-  "maker": "maker",
-  "category1": "디지털/가전",
-  "category2": "음향가전",
-  "category3": "이어폰",
-  "category4": ""
 }
 ```
 
@@ -160,6 +136,8 @@ Input:
 Notes:
 
 - `sort` supports `random` and `comment`
+- `display` supports `1` through `5`
+- `start` must be `1`
 
 ### `search_blog`
 
@@ -245,45 +223,11 @@ Notes:
 
 ### `search_book`
 
-Input:
-
-```json
-{
-  "query": "python",
-  "display": 5,
-  "start": 1,
-  "sort": "sim"
-}
-```
-
-Notes:
-
-- `sort` supports `sim` and `date`
+Compatibility-only tool. Always raises `NAVER_SERVICE_UNAVAILABLE` without making a network request.
 
 ### `search_book_advanced`
 
-Purpose:
-
-Wrap Naver advanced book lookup while keeping the same normalized `source: "book"` response shape.
-
-Input:
-
-```json
-{
-  "query": "",
-  "display": 5,
-  "start": 1,
-  "sort": "sim",
-  "title": "clean code",
-  "isbn": ""
-}
-```
-
-Notes:
-
-- at least one of `title` or `isbn` is required
-- if `query` is omitted, the tool uses `title` or `isbn` as the normalized query
-- `sort` supports `sim` and `date`
+Compatibility-only tool. Always raises `NAVER_SERVICE_UNAVAILABLE` without making a network request.
 
 ### `search_encyc`
 
@@ -316,36 +260,13 @@ Notes:
 
 ### `search_shop`
 
-Input:
-
-```json
-{
-  "query": "wireless earbuds",
-  "display": 5,
-  "start": 1,
-  "sort": "sim",
-  "filter": "naverpay",
-  "exclude": "used:cbshop"
-}
-```
-
-Notes:
-
-- `sort` supports `sim`, `date`, `asc`, `dsc`
-- `filter` supports `""` and `naverpay`
-- `exclude` is a colon-separated list of `used`, `rental`, `cbshop`
+Compatibility-only tool. Always raises `NAVER_SERVICE_UNAVAILABLE` without making a network request.
 
 ### `search_doc`
 
-Input:
+Compatibility-only tool. Always raises `NAVER_SERVICE_UNAVAILABLE` without making a network request.
 
-```json
-{
-  "query": "generative ai report",
-  "display": 5,
-  "start": 1
-}
-```
+Naver ended book, shopping product, and professional document search on 2026-07-31 and did not provide replacement NAVER API HUB endpoints.
 
 ### `spell_check`
 
@@ -418,6 +339,7 @@ Output:
   "meta": {
     "display": 5,
     "deduplicated": 0,
+    "fallback": false,
     "cached": false
   }
 }
@@ -433,8 +355,8 @@ Current merge policy:
 
 - `place_search` -> `local` then `blog`
 - `news_search` -> `news`
-- `book_search` -> `book`
-- `shopping_search` -> `shop` then `blog`
+- `book_search` -> `web` then `blog`, with `meta.fallback: true`
+- `shopping_search` -> `web` then `blog`, with `meta.fallback: true`
 - `community_search` -> `blog` then `cafearticle`
 - `general_web` -> `web` then `blog`
 - duplicate items are removed using `originallink`, then `link`, then `source:title`
@@ -489,9 +411,19 @@ Input:
       "group_name": "pangyo",
       "keywords": ["pangyo restaurants", "pangyo cafe"]
     }
-  ]
+  ],
+  "device": "pc",
+  "gender": "f",
+  "ages": ["3", "4"]
 }
 ```
+
+Notes:
+
+- `keyword_groups` accepts up to 5 groups
+- each group accepts up to 20 keywords
+- Search Trend age codes are `1` through `11`
+- empty optional filters are omitted from the upstream request
 
 ### `datalab_shopping_category_trends`
 
@@ -676,13 +608,13 @@ Input:
 - `query` must not be empty for search tools unless the tool explicitly allows an empty `query` field
 - `display` must be between `1` and `100`
 - `start` must be between `1` and `1000`
+- `search_local.display` must be between `1` and `5`
+- `search_local.start` must be `1`
 - `search_image.filter` must be one of `all`, `large`, `medium`, `small`
-- `search_shop.filter` must be `""` or `naverpay`
-- `search_shop.exclude` must contain only `used`, `rental`, `cbshop`
-- `search_book_advanced` requires `title` or `isbn`
 - `start_date` and `end_date` must be valid `YYYY-MM-DD`
 - `time_unit` must be one of `date`, `week`, `month`
-- `keyword_groups` must be non-empty for `datalab_search_trends`
+- `keyword_groups` must contain 1 through 5 groups for `datalab_search_trends`
+- Search Trend `ages` must contain only codes `1` through `11`
 - shopping `categories` must be non-empty and limited to 3 groups
 - shopping keyword groups must be non-empty and limited to 5 groups
 - each shopping keyword trend group must contain exactly 1 keyword in `params`
@@ -710,6 +642,7 @@ Recommended codes:
 - `NAVER_RATE_LIMIT`
 - `NAVER_TIMEOUT`
 - `NAVER_API_ERROR`
+- `NAVER_SERVICE_UNAVAILABLE`
 - `VALIDATION_ERROR`
 
 ## Timeout Guidance
@@ -733,4 +666,5 @@ Suggested defaults:
 - field renames should be avoided
 - tool names should be treated as stable once published
 - `datalab_shopping_device_trends` is retained as an alias for existing clients
+- retired search tool names are retained and return `NAVER_SERVICE_UNAVAILABLE`
 - major contract changes should be documented before implementation
