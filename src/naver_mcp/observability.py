@@ -10,7 +10,6 @@ LOGGER_NAME = "naver_mcp"
 TOOL_LOGGER_NAME = f"{LOGGER_NAME}.tools"
 _JSON_HANDLER_MARKER = "_naver_mcp_json_handler"
 _SAFE_RECORD_FIELDS = (
-    "event",
     "request_id",
     "tool",
     "error_code",
@@ -39,7 +38,7 @@ class JsonLogFormatter(logging.Formatter):
             "logger": record.name,
             "event": getattr(record, "event", "application_log"),
         }
-        for field_name in _SAFE_RECORD_FIELDS[1:]:
+        for field_name in _SAFE_RECORD_FIELDS:
             value = getattr(record, field_name, None)
             if value is not None:
                 payload[field_name] = value

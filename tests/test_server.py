@@ -358,6 +358,45 @@ class ServerContractTest(unittest.TestCase):
             logger.setLevel(original_level)
             logger.propagate = original_propagate
 
+    def test_configured_tool_logger_emits_json(self) -> None:
+        logger = logging.getLogger("naver_mcp")
+        tool_logger = logging.getLogger("naver_mcp.tools")
+        original_handlers = list(logger.handlers)
+        original_level = logger.level
+        original_propagate = logger.propagate
+        original_tool_level = tool_logger.level
+        original_tool_propagate = tool_logger.propagate
+        logger.handlers.clear()
+        stream = io.StringIO()
+        try:
+            configure_logging("INFO")
+            logger.handlers[0].setStream(stream)
+            tool_logger.setLevel(logging.NOTSET)
+            tool_logger.propagate = True
+            tool_logger.warning(
+                "tool_error",
+                extra={
+                    "event": "tool_error",
+                    "request_id": "b" * 32,
+                    "tool": "search_news",
+                    "error_code": "NAVER_TIMEOUT",
+                    "retryable": True,
+                },
+            )
+        finally:
+            logger.handlers[:] = original_handlers
+            logger.setLevel(original_level)
+            logger.propagate = original_propagate
+            tool_logger.setLevel(original_tool_level)
+            tool_logger.propagate = original_tool_propagate
+
+        payload = json.loads(stream.getvalue())
+        self.assertEqual(payload["logger"], "naver_mcp.tools")
+        self.assertEqual(payload["event"], "tool_error")
+        self.assertEqual(payload["request_id"], "b" * 32)
+        self.assertEqual(payload["error_code"], "NAVER_TIMEOUT")
+        self.assertTrue(payload["retryable"])
+
     def test_main_passes_only_transport_for_stdio(self) -> None:
         config = NaverMCPConfig(transport="stdio")
         server = Mock()

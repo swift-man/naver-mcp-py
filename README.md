@@ -375,8 +375,9 @@ journalctl -u naver-mcp -f
 ss -ltnp | grep 8100
 ```
 
-도구 오류는 한 줄 JSON으로 journal에 기록됩니다. 각 로그는 `event`, `tool`,
-`error_code`, `retryable`, `status_code`, `request_id`만 포함하며 검색어, 오류 메시지,
+도구 오류는 한 줄 JSON으로 journal에 기록됩니다. 각 로그의 공통 필드는 `timestamp`,
+`level`, `logger`, `event`, `tool`, `error_code`, `retryable`, `request_id`이며,
+상위 HTTP 상태 코드가 있는 오류만 `status_code`를 추가합니다. 검색어, 오류 메시지,
 API 키와 시크릿은 기록하지 않습니다. 오류 응답의 `meta.request_id`로 같은 서버 로그를
 찾을 수 있습니다.
 
