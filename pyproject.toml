@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "naver-mcp-py"
-version = "0.1.0"
-description = "Python MCP server and client library for Naver Search API and DataLab"
+version = "0.2.0.0"
+description = "Python MCP server and client library for NAVER API HUB"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []
@@ -19,3 +19,6 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["E402"]

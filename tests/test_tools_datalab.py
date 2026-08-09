@@ -4,7 +4,7 @@ import sys
 import unittest
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 if str(SRC_DIR) not in sys.path:
@@ -24,6 +24,7 @@ from naver_mcp.tools_datalab import DataLabTools
 
 class FakeDataLabClient:
     def __init__(self) -> None:
+        self.last_search_request: Optional[DataLabSearchTrendsRequest] = None
         self.calls = {
             "search_trends": 0,
             "shopping_category": 0,
@@ -40,6 +41,7 @@ class FakeDataLabClient:
         self,
         request: DataLabSearchTrendsRequest,
     ) -> Mapping[str, Any]:
+        self.last_search_request = request
         self.calls["search_trends"] += 1
         return {
             "startDate": request.start_date,
@@ -244,6 +246,22 @@ class DataLabToolsTest(unittest.TestCase):
         self.assertEqual(result["meta"]["start_date"], "2026-03-01")
         self.assertFalse(result["meta"]["cached"])
 
+    def test_datalab_search_trends_accepts_api_hub_filters(self) -> None:
+        self.tools.datalab_search_trends(
+            start_date="2026-03-01",
+            end_date="2026-03-18",
+            time_unit="date",
+            keyword_groups=[{"group_name": "파이썬", "keywords": ["파이썬"]}],
+            device="pc",
+            gender="f",
+            ages=["3", "4"],
+        )
+
+        assert self.client.last_search_request is not None
+        self.assertEqual(self.client.last_search_request.device, "pc")
+        self.assertEqual(self.client.last_search_request.gender, "f")
+        self.assertEqual(self.client.last_search_request.ages, ["3", "4"])
+
     def test_datalab_shopping_category_trends_returns_category_data(self) -> None:
         result = self.tools.datalab_shopping_category_trends(
             start_date="2026-03-01",
@@ -366,6 +384,42 @@ class DataLabToolsTest(unittest.TestCase):
                 end_date="2026-03-18",
                 time_unit="date",
                 keyword_groups=[],
+            )
+
+    def test_datalab_search_trends_validates_api_hub_age_codes(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.tools.datalab_search_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                keyword_groups=[{"group_name": "파이썬", "keywords": ["파이썬"]}],
+                ages=["20"],
+            )
+
+    def test_datalab_search_trends_limits_keywords_per_group(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.tools.datalab_search_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                keyword_groups=[
+                    {
+                        "group_name": "too-many",
+                        "keywords": [f"keyword-{index}" for index in range(21)],
+                    }
+                ],
+            )
+
+    def test_datalab_search_trends_limits_keyword_groups(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.tools.datalab_search_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                keyword_groups=[
+                    {"group_name": f"group-{index}", "keywords": [f"keyword-{index}"]}
+                    for index in range(6)
+                ],
             )
 
     def test_datalab_shopping_category_trends_validates_device(self) -> None:

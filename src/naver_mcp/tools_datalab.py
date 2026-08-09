@@ -97,6 +97,9 @@ class DataLabTools:
         end_date: str,
         time_unit: str,
         keyword_groups: list[dict[str, Any]],
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
     ) -> dict[str, Any]:
         # 외부 입력은 dict로 받고, 내부에서는 검증 가능한 요청 모델로 즉시 변환한다.
         groups = [
@@ -111,6 +114,9 @@ class DataLabTools:
             end_date=end_date,
             time_unit=time_unit,
             keyword_groups=groups,
+            device=device,
+            gender=gender,
+            ages=list(ages or []),
         )
         return self._run_datalab_tool(
             "datalab_search_trends",

@@ -69,3 +69,8 @@ class NaverTimeoutError(NaverMCPError):
 class NaverAPIError(NaverMCPError):
     code = "NAVER_API_ERROR"
     retryable = False
+
+
+class NaverServiceUnavailableError(NaverMCPError):
+    code = "NAVER_SERVICE_UNAVAILABLE"
+    retryable = False

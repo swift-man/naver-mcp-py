@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Callable, Mapping, Optional, Protocol
+from typing import Any, Callable, Mapping, NoReturn, Optional, Protocol
 
 from .cache import TTLCache
 from .config import NaverMCPConfig
+from .errors import NaverServiceUnavailableError
 from .models import (
     BlogSearchRequest,
     BookAdvancedSearchRequest,
@@ -225,8 +226,7 @@ class SearchTools:
         start: int = 1,
         sort: str = "sim",
     ) -> dict[str, Any]:
-        request = BookSearchRequest(query=query, display=display, start=start, sort=sort)
-        return self._run_search("search_book", "book", request, self.client.search_book)
+        self._raise_retired_search("search_book")
 
     def search_book_advanced(
         self,
@@ -238,20 +238,7 @@ class SearchTools:
         title: str = "",
         isbn: str = "",
     ) -> dict[str, Any]:
-        request = BookAdvancedSearchRequest(
-            query=query,
-            display=display,
-            start=start,
-            sort=sort,
-            title=title,
-            isbn=isbn,
-        )
-        return self._run_search(
-            "search_book_advanced",
-            "book",
-            request,
-            self.client.search_book_advanced,
-        )
+        self._raise_retired_search("search_book_advanced")
 
     def search_encyc(
         self,
@@ -284,15 +271,7 @@ class SearchTools:
         filter: str = "",
         exclude: str = "",
     ) -> dict[str, Any]:
-        request = ShopSearchRequest(
-            query=query,
-            display=display,
-            start=start,
-            sort=sort,
-            filter=filter,
-            exclude=exclude,
-        )
-        return self._run_search("search_shop", "shop", request, self.client.search_shop)
+        self._raise_retired_search("search_shop")
 
     def search_doc(
         self,
@@ -301,8 +280,7 @@ class SearchTools:
         display: int = 5,
         start: int = 1,
     ) -> dict[str, Any]:
-        request = DocSearchRequest(query=query, display=display, start=start)
-        return self._run_search("search_doc", "doc", request, self.client.search_doc)
+        self._raise_retired_search("search_doc")
 
     def spell_check(self, *, query: str) -> dict[str, Any]:
         request = QueryOnlyRequest(query=query)
@@ -341,6 +319,7 @@ class SearchTools:
         source_results = [plan["call"]() for plan in plans]
         unique_items = self._merge_auto_results(source_results)
         total_candidates = sum(len(result.get("items", [])) for result in source_results)
+        uses_retired_source_fallback = intent in {"book_search", "shopping_search"}
 
         normalized = {
             "query": request.query,
@@ -352,9 +331,12 @@ class SearchTools:
                 "returned": len(unique_items[: request.display]),
                 "total_candidates": total_candidates,
                 "deduplicated": max(total_candidates - len(unique_items), 0),
+                "fallback": uses_retired_source_fallback,
                 "cached": False,
             },
         }
+        if uses_retired_source_fallback:
+            normalized["meta"]["fallback_reason"] = "source_api_retired"
         self.cache.set(cache_key, normalized)
         return normalized
 
@@ -431,7 +413,7 @@ class SearchTools:
                     "source": "local",
                     "call": lambda: self.search_local(
                         query=query,
-                        display=display,
+                        display=min(display, 5),
                         start=1,
                         sort="comment",
                     ),
@@ -461,24 +443,27 @@ class SearchTools:
         if intent == "book_search":
             return [
                 {
-                    "source": "book",
-                    "call": lambda: self.search_book(
+                    "source": "web",
+                    "call": lambda: self.search_web(query=query, display=display, start=1),
+                },
+                {
+                    "source": "blog",
+                    "call": lambda: self.search_blog(
                         query=query,
                         display=display,
                         start=1,
                         sort="sim",
                     ),
-                }
+                },
             ]
         if intent == "shopping_search":
             return [
                 {
-                    "source": "shop",
-                    "call": lambda: self.search_shop(
+                    "source": "web",
+                    "call": lambda: self.search_web(
                         query=query,
                         display=display,
                         start=1,
-                        sort="sim",
                     ),
                 },
                 {
@@ -527,6 +512,13 @@ class SearchTools:
                 ),
             },
         ]
+
+    @staticmethod
+    def _raise_retired_search(tool_name: str) -> NoReturn:
+        raise NaverServiceUnavailableError(
+            f"{tool_name} is unavailable because Naver ended the underlying "
+            "book, shopping, and professional document search APIs on 2026-07-31"
+        )
 
     def _merge_auto_results(
         self,

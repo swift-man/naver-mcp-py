@@ -6,9 +6,19 @@ from typing import Mapping, Optional
 
 from .errors import ValidationError
 
+DEFAULT_API_BASE_URL = "https://naverapihub.apigw.ntruss.com"
+
 
 def _read_str(env: Mapping[str, str], key: str, default: str = "") -> str:
     return env.get(key, default).strip()
+
+
+def _read_first(env: Mapping[str, str], *keys: str) -> str:
+    for key in keys:
+        value = _read_str(env, key)
+        if value:
+            return value
+    return ""
 
 
 def _read_int(env: Mapping[str, str], key: str, default: int) -> int:
@@ -41,17 +51,25 @@ class NaverMCPConfig:
     transport: str = "streamable-http"
     http_timeout_sec: float = 8.0
     cache_ttl_sec: int = 300
-    api_base_url: str = "https://openapi.naver.com/v1"
+    api_base_url: str = DEFAULT_API_BASE_URL
 
     @classmethod
     def from_env(
         cls,
         env: Optional[Mapping[str, str]] = None,
     ) -> "NaverMCPConfig":
-        source = env or os.environ
+        source = os.environ if env is None else env
         return cls(
-            client_id=_read_str(source, "NAVER_CLIENT_ID"),
-            client_secret=_read_str(source, "NAVER_CLIENT_SECRET"),
+            client_id=_read_first(
+                source,
+                "NAVER_API_HUB_CLIENT_ID",
+                "NAVER_CLIENT_ID",
+            ),
+            client_secret=_read_first(
+                source,
+                "NAVER_API_HUB_CLIENT_SECRET",
+                "NAVER_CLIENT_SECRET",
+            ),
             host=_read_str(source, "NAVER_MCP_HOST", "127.0.0.1"),
             port=_read_int(source, "NAVER_MCP_PORT", 8100),
             path=_read_str(source, "NAVER_MCP_PATH", "/mcp") or "/mcp",
@@ -62,11 +80,15 @@ class NaverMCPConfig:
             ),
             http_timeout_sec=_read_float(source, "NAVER_HTTP_TIMEOUT_SEC", 8.0),
             cache_ttl_sec=_read_int(source, "NAVER_CACHE_TTL_SEC", 300),
+            api_base_url=(
+                _read_str(source, "NAVER_API_BASE_URL", DEFAULT_API_BASE_URL)
+                or DEFAULT_API_BASE_URL
+            ),
         )
 
     def require_credentials(self) -> None:
         if self.client_id and self.client_secret:
             return
         raise ValidationError(
-            "NAVER_CLIENT_ID and NAVER_CLIENT_SECRET must be configured"
+            "NAVER_API_HUB_CLIENT_ID and NAVER_API_HUB_CLIENT_SECRET must be configured"
         )

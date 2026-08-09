@@ -104,6 +104,7 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         start: int = 1,
         sort: str = "sim",
     ) -> dict[str, Any]:
+        """지원 종료된 네이버 책 검색 도구 이름을 호환 목적으로 유지합니다."""
         return search_tools.search_book(query=query, display=display, start=start, sort=sort)
 
     @server.tool()
@@ -115,6 +116,7 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         title: str = "",
         isbn: str = "",
     ) -> dict[str, Any]:
+        """지원 종료된 네이버 책 상세 검색 도구 이름을 호환 목적으로 유지합니다."""
         return search_tools.search_book_advanced(
             query=query,
             display=display,
@@ -150,6 +152,7 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         filter: str = "",
         exclude: str = "",
     ) -> dict[str, Any]:
+        """지원 종료된 네이버 쇼핑 상품 검색 도구 이름을 호환 목적으로 유지합니다."""
         return search_tools.search_shop(
             query=query,
             display=display,
@@ -165,6 +168,7 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         display: int = 5,
         start: int = 1,
     ) -> dict[str, Any]:
+        """지원 종료된 네이버 전문자료 검색 도구 이름을 호환 목적으로 유지합니다."""
         return search_tools.search_doc(query=query, display=display, start=start)
 
     @server.tool()
@@ -185,12 +189,18 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         end_date: str,
         time_unit: str,
         keyword_groups: list[dict[str, Any]],
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
     ) -> dict[str, Any]:
         return datalab_tools.datalab_search_trends(
             start_date=start_date,
             end_date=end_date,
             time_unit=time_unit,
             keyword_groups=keyword_groups,
+            device=device,
+            gender=gender,
+            ages=ages,
         )
 
     @server.tool()
