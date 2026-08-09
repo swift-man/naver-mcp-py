@@ -223,6 +223,20 @@ class NaverClientTest(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValidationError):
                 NaverMCPConfig(transport=value)  # type: ignore[arg-type]
 
+    def test_config_validates_and_normalizes_log_level(self) -> None:
+        for value in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+            with self.subTest(value=value):
+                self.assertEqual(NaverMCPConfig(log_level=value).log_level, value)
+
+        self.assertEqual(NaverMCPConfig(log_level=" warning ").log_level, "WARNING")
+        self.assertEqual(
+            NaverMCPConfig.from_env({"NAVER_MCP_LOG_LEVEL": "error"}).log_level,
+            "ERROR",
+        )
+        for value in ("TRACE", "", None):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                NaverMCPConfig(log_level=value)  # type: ignore[arg-type]
+
     def test_search_requests_use_api_hub_paths_and_headers(self) -> None:
         self.client.search_local(LocalSearchRequest(query="카페"))
         self.client.search_blog(BlogSearchRequest(query="카페"))

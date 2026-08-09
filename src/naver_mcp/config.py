@@ -14,6 +14,7 @@ DEFAULT_API_BASE_URL = "https://naverapihub.apigw.ntruss.com"
 HTTP_TRANSPORTS = {"http", "sse", "streamable-http"}
 SUPPORTED_TRANSPORTS = HTTP_TRANSPORTS | {"stdio"}
 REMOTE_ACCESS_MODES = {"disabled", "fastmcp-auth", "trusted-network"}
+LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
 
 def _read_str(env: Mapping[str, str], key: str, default: str = "") -> str:
@@ -134,6 +135,7 @@ class NaverMCPConfig:
     auth_jwks_uri: str = ""
     auth_issuer: str = ""
     auth_audience: str = ""
+    log_level: str = "INFO"
 
     def __post_init__(self) -> None:
         if isinstance(self.port, bool) or not isinstance(self.port, int):
@@ -185,6 +187,14 @@ class NaverMCPConfig:
             raise ValidationError(f"remote_access must be one of: {allowed}")
         object.__setattr__(self, "remote_access", remote_access)
 
+        if not isinstance(self.log_level, str):
+            raise ValidationError("log_level must be a supported logging level")
+        log_level = self.log_level.strip().upper()
+        if log_level not in LOG_LEVELS:
+            allowed = ", ".join(sorted(LOG_LEVELS))
+            raise ValidationError(f"log_level must be one of: {allowed}")
+        object.__setattr__(self, "log_level", log_level)
+
     @classmethod
     def from_env(
         cls,
@@ -216,6 +226,7 @@ class NaverMCPConfig:
             auth_jwks_uri=_read_str(source, "NAVER_MCP_AUTH_JWKS_URI"),
             auth_issuer=_read_str(source, "NAVER_MCP_AUTH_ISSUER"),
             auth_audience=_read_str(source, "NAVER_MCP_AUTH_AUDIENCE"),
+            log_level=_read_str(source, "NAVER_MCP_LOG_LEVEL", "INFO") or "INFO",
         )
 
     def require_credentials(self) -> None:

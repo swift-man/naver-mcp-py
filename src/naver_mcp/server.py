@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
+import uuid
 from typing import Any, Optional
 
 from .cache import TTLCache
 from .client import NaverClient
 from .config import NaverMCPConfig
 from .errors import NaverMCPError
+from .observability import TOOL_LOGGER_NAME, configure_logging, error_log_level
 from .tools_datalab import DataLabTools
 from .tools_search import SearchTools
 
@@ -20,6 +23,7 @@ except ImportError:  # pragma: no cover - optional runtime dependency
 class _ToolErrorBoundary:
     def __init__(self, tools: Any) -> None:
         self._tools = tools
+        self._logger = logging.getLogger(TOOL_LOGGER_NAME)
 
     def __getattr__(self, name: str) -> Any:
         tool = getattr(self._tools, name)
@@ -30,8 +34,24 @@ class _ToolErrorBoundary:
             try:
                 return tool(*args, **kwargs)
             except NaverMCPError as exc:
-                # MCP 클라이언트가 안정적인 코드로 분기할 수 있도록 도메인 오류를 보존한다.
-                return exc.to_dict()
+                request_id = uuid.uuid4().hex
+                # 입력값과 오류 메시지는 기록하지 않고 운영 분기에 필요한 필드만 남긴다.
+                self._logger.log(
+                    error_log_level(exc),
+                    "tool_error",
+                    extra={
+                        "event": "tool_error",
+                        "request_id": request_id,
+                        "tool": name,
+                        "error_code": exc.error_code,
+                        "retryable": exc.is_retryable,
+                        "status_code": exc.status_code,
+                    },
+                )
+                # 응답과 서버 로그를 연결하되 기존 오류 객체는 그대로 유지한다.
+                payload = exc.to_dict()
+                payload["meta"] = {"request_id": request_id}
+                return payload
 
         return call
 
@@ -454,6 +474,7 @@ def healthz() -> dict[str, str]:
 
 def main() -> None:
     config = NaverMCPConfig.from_env()
+    configure_logging(config.log_level)
     server = create_server(config)
     if config.transport == "stdio":
         server.run(transport=config.transport)

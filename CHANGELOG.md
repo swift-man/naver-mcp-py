@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.1.0] - 2026-08-09
+
+### Added
+
+- Added JSON tool-error logs with correlation IDs, allowlisted fields, and domain-specific log levels for Linux journal operations.
+- Added `NAVER_MCP_LOG_LEVEL` configuration with validated standard logging levels.
+
+### Changed
+
+- Structured MCP error responses now include `meta.request_id` so operators can match client-visible failures to server logs without recording queries, error messages, or credentials.
+
 ## [0.2.0.0] - 2026-08-09
 
 ### Added
