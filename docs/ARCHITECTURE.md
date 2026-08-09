@@ -59,6 +59,7 @@ server.py
     -> normalize.py
     -> models.py
     -> cache.py
+  -> observability.py
 ```
 
 ### `config.py`
@@ -151,6 +152,13 @@ Defines:
 - main process entry point
 - a lightweight `healthz()` helper for embedding scenarios
 
+### `observability.py`
+
+Defines the CLI server's JSON log formatter and domain-error log level policy.
+Tool errors include a generated correlation ID in both the MCP response and the
+server log. Only allowlisted operational fields are serialized; tool arguments,
+error messages, API keys, and secrets are excluded.
+
 ## Design Decisions
 
 ### Common Response Contract
@@ -215,6 +223,7 @@ Book and shopping intents use `web` and `blog` fallback sources because the dedi
 - Upstream redirects must preserve scheme, host, and effective port before authentication headers are forwarded.
 - HTTP servers should bind to loopback by default.
 - Non-loopback binding requires FastMCP authentication or an operator-confirmed firewall/VPN allowlist.
+- Tool errors should emit allowlisted JSON fields and a response-visible correlation ID without logging user input or credentials.
 
 ## Cache Guidance
 

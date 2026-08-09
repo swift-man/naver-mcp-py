@@ -114,6 +114,7 @@ naver-mcp-py/
     errors.py
     models.py
     normalize.py
+    observability.py
     server.py
     tools_datalab.py
     tools_search.py
@@ -170,6 +171,7 @@ Available environment variables:
 - `NAVER_MCP_PORT` (integer from `1` through `65535`)
 - `NAVER_MCP_PATH`
 - `NAVER_MCP_TRANSPORT` (`stdio`, `http`, `sse`, or `streamable-http`)
+- `NAVER_MCP_LOG_LEVEL` (`DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`; defaults to `INFO`)
 - `NAVER_MCP_REMOTE_ACCESS` (optional; `disabled`, `fastmcp-auth`, or `trusted-network`)
 - `NAVER_MCP_AUTH_JWKS_URI`, `NAVER_MCP_AUTH_ISSUER`, and `NAVER_MCP_AUTH_AUDIENCE` when using JWT authentication
 - `NAVER_HTTP_TIMEOUT_SEC`
@@ -199,6 +201,7 @@ export NAVER_MCP_HOST="127.0.0.1"
 export NAVER_MCP_PORT="8100"
 export NAVER_MCP_PATH="/mcp"
 export NAVER_MCP_TRANSPORT="streamable-http"
+export NAVER_MCP_LOG_LEVEL="INFO"
 export NAVER_MCP_REMOTE_ACCESS="disabled"
 export NAVER_HTTP_TIMEOUT_SEC="8.0"
 export NAVER_CACHE_TTL_SEC="300"
@@ -304,6 +307,7 @@ NAVER_MCP_HOST=127.0.0.1
 NAVER_MCP_PORT=8100
 NAVER_MCP_PATH=/mcp
 NAVER_MCP_TRANSPORT=streamable-http
+NAVER_MCP_LOG_LEVEL=INFO
 NAVER_MCP_REMOTE_ACCESS=disabled
 NAVER_HTTP_TIMEOUT_SEC=8.0
 NAVER_CACHE_TTL_SEC=300
@@ -370,6 +374,20 @@ sudo systemctl status naver-mcp --no-pager
 journalctl -u naver-mcp -f
 ss -ltnp | grep 8100
 ```
+
+도구 오류는 한 줄 JSON으로 journal에 기록됩니다. 각 로그는 `event`, `tool`,
+`error_code`, `retryable`, `status_code`, `request_id`만 포함하며 검색어, 오류 메시지,
+API 키와 시크릿은 기록하지 않습니다. 오류 응답의 `meta.request_id`로 같은 서버 로그를
+찾을 수 있습니다.
+
+예시:
+
+```json
+{"timestamp":"2026-08-09T12:30:00.000Z","level":"WARNING","logger":"naver_mcp.tools","event":"tool_error","request_id":"7d5d4e58f8374e76ad945a95235d6288","tool":"search_news","error_code":"NAVER_TIMEOUT","retryable":true}
+```
+
+검증 오류와 지원 종료 도구는 `INFO`, 인증·할당량·타임아웃 및 재시도 가능 오류는
+`WARNING`, 그 밖의 비재시도 API 오류는 `ERROR` 수준으로 기록됩니다.
 
 ### Update an existing Linux deployment
 

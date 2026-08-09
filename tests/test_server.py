@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import inspect
+import io
+import json
+import logging
 import sys
 import unittest
 from pathlib import Path
@@ -12,8 +15,16 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from naver_mcp.config import NaverMCPConfig
-from naver_mcp.errors import ValidationError
-from naver_mcp.server import create_server, main
+from naver_mcp.errors import (
+    NaverAPIError,
+    NaverAuthError,
+    NaverRateLimitError,
+    NaverServiceUnavailableError,
+    NaverTimeoutError,
+    ValidationError,
+)
+from naver_mcp.observability import JsonLogFormatter, configure_logging
+from naver_mcp.server import _ToolErrorBoundary, create_server, main
 
 
 class FakeFastMCP:
@@ -40,6 +51,15 @@ class FakeFastMCP:
 class FakeJWTVerifier:
     def __init__(self, **config: Any) -> None:
         self.config = config
+
+
+class RecordingLogHandler(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
 
 
 class ServerContractTest(unittest.TestCase):
@@ -212,6 +232,131 @@ class ServerContractTest(unittest.TestCase):
 
         self.assertEqual(result["error"]["code"], "VALIDATION_ERROR")
         self.assertFalse(result["error"]["retryable"])
+        self.assertRegex(result["meta"]["request_id"], r"^[0-9a-f]{32}$")
+
+    def test_tool_error_logging_uses_safe_structured_fields_and_levels(self) -> None:
+        class FailingTools:
+            def __init__(self, error: Exception) -> None:
+                self.error = error
+
+            def fail(self, query: str) -> None:
+                raise self.error
+
+        cases = [
+            (ValidationError("secret query"), logging.INFO),
+            (NaverServiceUnavailableError("retired"), logging.INFO),
+            (NaverAuthError("secret credential", status_code=401), logging.WARNING),
+            (NaverRateLimitError("quota", status_code=429), logging.WARNING),
+            (NaverTimeoutError("timeout"), logging.WARNING),
+            (NaverAPIError("temporary", retryable=True), logging.WARNING),
+            (NaverAPIError("invalid upstream payload"), logging.ERROR),
+        ]
+        logger = logging.getLogger("naver_mcp.tools")
+        original_level = logger.level
+        original_propagate = logger.propagate
+        handler = RecordingLogHandler()
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+        logger.addHandler(handler)
+        try:
+            for error, expected_level in cases:
+                with self.subTest(error=error.error_code):
+                    handler.records.clear()
+                    result = _ToolErrorBoundary(FailingTools(error)).fail(
+                        "never-log-this-query"
+                    )
+
+                    self.assertEqual(len(handler.records), 1)
+                    record = handler.records[0]
+                    request_id = result["meta"]["request_id"]
+                    self.assertEqual(record.levelno, expected_level)
+                    self.assertEqual(record.getMessage(), "tool_error")
+                    self.assertEqual(record.event, "tool_error")
+                    self.assertEqual(record.tool, "fail")
+                    self.assertEqual(record.error_code, error.error_code)
+                    self.assertEqual(record.retryable, error.is_retryable)
+                    self.assertEqual(record.request_id, request_id)
+                    self.assertNotIn("never-log-this-query", record.getMessage())
+                    self.assertNotIn(error.message, record.getMessage())
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(original_level)
+            logger.propagate = original_propagate
+
+    def test_json_log_formatter_emits_only_allowlisted_fields(self) -> None:
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(JsonLogFormatter())
+        logger = logging.getLogger("naver_mcp.formatter-test")
+        original_level = logger.level
+        original_propagate = logger.propagate
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+        logger.addHandler(handler)
+        try:
+            logger.info(
+                "message-that-must-not-be-serialized",
+                extra={
+                    "event": "tool_error",
+                    "request_id": "a" * 32,
+                    "tool": "search_local",
+                    "error_code": "VALIDATION_ERROR",
+                    "retryable": False,
+                    "client_secret": "never-serialize-this",
+                },
+            )
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(original_level)
+            logger.propagate = original_propagate
+
+        payload = json.loads(stream.getvalue())
+        self.assertEqual(payload["event"], "tool_error")
+        self.assertEqual(payload["request_id"], "a" * 32)
+        self.assertEqual(payload["tool"], "search_local")
+        self.assertEqual(payload["error_code"], "VALIDATION_ERROR")
+        self.assertFalse(payload["retryable"])
+        self.assertRegex(payload["timestamp"], r"^\d{4}-\d{2}-\d{2}T.*Z$")
+        self.assertNotIn("message", payload)
+        self.assertNotIn("client_secret", payload)
+        self.assertNotIn("message-that-must-not-be-serialized", stream.getvalue())
+
+        stream.seek(0)
+        stream.truncate(0)
+        handler.emit(
+            logging.LogRecord(
+                "naver_mcp.formatter-test",
+                logging.INFO,
+                __file__,
+                1,
+                "another-sensitive-message",
+                (),
+                None,
+            )
+        )
+        fallback_payload = json.loads(stream.getvalue())
+        self.assertEqual(fallback_payload["event"], "application_log")
+        self.assertNotIn("another-sensitive-message", stream.getvalue())
+
+    def test_configure_logging_is_idempotent(self) -> None:
+        logger = logging.getLogger("naver_mcp")
+        original_handlers = list(logger.handlers)
+        original_level = logger.level
+        original_propagate = logger.propagate
+        logger.handlers.clear()
+        try:
+            configure_logging("INFO")
+            configure_logging("ERROR")
+
+            self.assertEqual(len(logger.handlers), 1)
+            self.assertIsInstance(logger.handlers[0].formatter, JsonLogFormatter)
+            self.assertEqual(logger.level, logging.ERROR)
+            self.assertEqual(logger.handlers[0].level, logging.ERROR)
+            self.assertFalse(logger.propagate)
+        finally:
+            logger.handlers[:] = original_handlers
+            logger.setLevel(original_level)
+            logger.propagate = original_propagate
 
     def test_main_passes_only_transport_for_stdio(self) -> None:
         config = NaverMCPConfig(transport="stdio")
@@ -219,10 +364,12 @@ class ServerContractTest(unittest.TestCase):
 
         with (
             patch("naver_mcp.server.NaverMCPConfig.from_env", return_value=config),
+            patch("naver_mcp.server.configure_logging") as configure_logging_mock,
             patch("naver_mcp.server.create_server", return_value=server),
         ):
             main()
 
+        configure_logging_mock.assert_called_once_with("INFO")
         server.run.assert_called_once_with(transport="stdio")
 
     def test_main_passes_network_options_for_http_transport(self) -> None:
@@ -236,10 +383,12 @@ class ServerContractTest(unittest.TestCase):
 
         with (
             patch("naver_mcp.server.NaverMCPConfig.from_env", return_value=config),
+            patch("naver_mcp.server.configure_logging") as configure_logging_mock,
             patch("naver_mcp.server.create_server", return_value=server),
         ):
             main()
 
+        configure_logging_mock.assert_called_once_with("INFO")
         server.run.assert_called_once_with(
             transport="http",
             host="127.0.0.1",

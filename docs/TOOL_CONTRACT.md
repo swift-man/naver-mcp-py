@@ -670,6 +670,9 @@ Errors are structured as:
     "code": "NAVER_API_ERROR",
     "message": "Naver API request failed",
     "retryable": true
+  },
+  "meta": {
+    "request_id": "7d5d4e58f8374e76ad945a95235d6288"
   }
 }
 ```
@@ -686,6 +689,10 @@ Recommended codes:
 `NAVER_RATE_LIMIT` represents the API HUB daily quota response and returns
 `retryable: false`. `NAVER_TIMEOUT` and temporary 5xx `NAVER_API_ERROR`
 responses may return `retryable: true`.
+
+`meta.request_id` is a 32-character hexadecimal correlation ID generated for
+each structured tool error. Operators can use it to match an MCP error response
+to the corresponding server log without recording the query or error message.
 
 ## Timeout Guidance
 
