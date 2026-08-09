@@ -53,6 +53,12 @@ DATALAB_GROUPED_ENDPOINTS = {
     "shopping/v1/category/keyword/gender",
     "shopping/v1/category/keyword/age",
 }
+DATALAB_KEYWORD_ENDPOINTS = {
+    "shopping/v1/category/keywords",
+    "shopping/v1/category/keyword/device",
+    "shopping/v1/category/keyword/gender",
+    "shopping/v1/category/keyword/age",
+}
 
 
 def _url_origin(url: str) -> Optional[tuple[str, str, int]]:
@@ -353,6 +359,19 @@ class NaverClient:
             for result in results:
                 if not isinstance(result, Mapping):
                     raise NaverAPIError("Naver API returned invalid DataLab result")
+                if endpoint in DATALAB_KEYWORD_ENDPOINTS:
+                    keywords = result.get("keyword")
+                    if (
+                        not isinstance(keywords, list)
+                        or not keywords
+                        or any(
+                            not isinstance(keyword, str) or not keyword.strip()
+                            for keyword in keywords
+                        )
+                    ):
+                        raise NaverAPIError(
+                            "Naver API returned invalid DataLab keywords"
+                        )
                 if "data" not in result:
                     raise NaverAPIError("Naver API response is missing DataLab data")
                 data = result["data"]

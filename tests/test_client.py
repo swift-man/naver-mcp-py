@@ -649,15 +649,67 @@ class NaverClientTest(unittest.TestCase):
                 NaverClient._validate_response_payload(endpoint, missing_group)
 
     def test_aggregate_datalab_endpoints_do_not_require_group(self) -> None:
-        payload = {
-            "results": [{"data": [{"period": "2026-08-01", "ratio": 50}]}]
-        }
-
         for endpoint in (
             "search-trend/v1/search",
             "shopping/v1/categories",
             "shopping/v1/category/keywords",
         ):
+            result = {"data": [{"period": "2026-08-01", "ratio": 50}]}
+            if endpoint == "shopping/v1/category/keywords":
+                result["keyword"] = ["정장"]
+            payload = {"results": [result]}
+            with self.subTest(endpoint=endpoint):
+                self.assertEqual(
+                    NaverClient._validate_response_payload(endpoint, payload),
+                    payload,
+                )
+
+    def test_datalab_keyword_endpoints_require_string_array_metadata(self) -> None:
+        endpoints = [
+            "shopping/v1/category/keywords",
+            "shopping/v1/category/keyword/device",
+            "shopping/v1/category/keyword/gender",
+            "shopping/v1/category/keyword/age",
+        ]
+        invalid_keywords = [None, "정장", [], [None], [10], ["   "], {}]
+
+        for endpoint in endpoints:
+            for keywords in invalid_keywords:
+                point = {"period": "2026-08-01", "ratio": 50}
+                if endpoint != "shopping/v1/category/keywords":
+                    point["group"] = "mo"
+                payload = {
+                    "results": [
+                        {
+                            "keyword": keywords,
+                            "data": [point],
+                        }
+                    ]
+                }
+                with (
+                    self.subTest(endpoint=endpoint, keywords=keywords),
+                    self.assertRaises(NaverAPIError),
+                ):
+                    NaverClient._validate_response_payload(endpoint, payload)
+
+    def test_datalab_keyword_endpoints_accept_string_array_metadata(self) -> None:
+        for endpoint in (
+            "shopping/v1/category/keywords",
+            "shopping/v1/category/keyword/device",
+            "shopping/v1/category/keyword/gender",
+            "shopping/v1/category/keyword/age",
+        ):
+            point = {"period": "2026-08-01", "ratio": 50}
+            if endpoint != "shopping/v1/category/keywords":
+                point["group"] = "mo"
+            payload = {
+                "results": [
+                    {
+                        "keyword": ["정장"],
+                        "data": [point],
+                    }
+                ]
+            }
             with self.subTest(endpoint=endpoint):
                 self.assertEqual(
                     NaverClient._validate_response_payload(endpoint, payload),

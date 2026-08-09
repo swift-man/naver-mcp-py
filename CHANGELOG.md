@@ -29,3 +29,4 @@ All notable changes to this project are documented in this file.
 - Prevent authentication headers from crossing origins or downgrading to HTTP through upstream redirects, and reject DataLab results that omit their `data` field.
 - Reject malformed JWKS URLs, invalid ports and cache TTL values, and DataLab points without a valid period; bound the in-memory cache with expiration pruning and LRU eviction.
 - Honor a zero Search API cache TTL for spell and adult-query tools, require groups in DataLab breakdown responses, and validate supported server transports before startup.
+- Preserve each element of NAVER API HUB shopping keyword arrays instead of stringifying the whole array into one metadata value.

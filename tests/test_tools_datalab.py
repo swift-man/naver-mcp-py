@@ -150,7 +150,7 @@ class FakeDataLabClient:
                 {
                     "title": request.keywords[0].name,
                     "category": [request.category],
-                    "keywords": request.keywords[0].params,
+                    "keyword": request.keywords[0].params,
                     "data": [{"period": "2026-03-01", "ratio": 44.8}],
                 }
             ],
@@ -169,7 +169,7 @@ class FakeDataLabClient:
                 {
                     "title": request.keyword,
                     "category": [request.category],
-                    "keyword": request.keyword,
+                    "keyword": [request.keyword],
                     "data": [
                         {"period": "2026-03-01", "group": "mo", "ratio": 73.0},
                         {"period": "2026-03-01", "group": "pc", "ratio": 27.0},
@@ -191,7 +191,7 @@ class FakeDataLabClient:
                 {
                     "title": request.keyword,
                     "category": [request.category],
-                    "keyword": request.keyword,
+                    "keyword": [request.keyword],
                     "data": [
                         {"period": "2026-03-01", "group": "f", "ratio": 66.6},
                         {"period": "2026-03-01", "group": "m", "ratio": 33.4},
@@ -213,7 +213,7 @@ class FakeDataLabClient:
                 {
                     "title": request.keyword,
                     "category": [request.category],
-                    "keyword": request.keyword,
+                    "keyword": [request.keyword],
                     "data": [
                         {"period": "2026-03-01", "group": "20", "ratio": 47.5},
                         {"period": "2026-03-01", "group": "30", "ratio": 52.5},
@@ -353,6 +353,7 @@ class DataLabToolsTest(unittest.TestCase):
 
         self.assertEqual(result["results"][0]["data"][0]["group"], "f")
         self.assertEqual(result["results"][0]["data"][1]["group"], "m")
+        self.assertEqual(result["results"][0]["keywords"], ["러닝화"])
 
     def test_datalab_shopping_keyword_age_trends_returns_age_groups(self) -> None:
         result = self.tools.datalab_shopping_keyword_age_trends(
@@ -365,6 +366,7 @@ class DataLabToolsTest(unittest.TestCase):
 
         self.assertEqual(result["results"][0]["data"][0]["group"], "20")
         self.assertEqual(result["results"][0]["data"][1]["group"], "30")
+        self.assertEqual(result["results"][0]["keywords"], ["러닝화"])
 
     def test_datalab_shopping_device_trends_keeps_backward_compatible_alias(self) -> None:
         result = self.tools.datalab_shopping_device_trends(

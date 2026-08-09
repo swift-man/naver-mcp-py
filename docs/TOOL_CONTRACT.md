@@ -417,7 +417,8 @@ Current merge policy:
 Notes:
 
 - `category` appears for shopping category and shopping keyword tools
-- `keywords` appears for search trends and shopping keyword tools
+- `keywords` appears for search trends and shopping keyword tools; the upstream
+  shopping `keyword` array is normalized element by element into this field
 - `group` appears only for breakdown tools such as device, gender, or age
 - `ratio` is a finite number from `0` through `100`
 - every result object must include a `data` array; a missing field is an upstream contract error, not an empty trend

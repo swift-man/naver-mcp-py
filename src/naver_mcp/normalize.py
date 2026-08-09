@@ -309,14 +309,18 @@ def _normalize_datalab_response(
         }
 
         keywords = result.get("keywords")
+        if keywords is None:
+            keywords = result.get("keyword")
         if isinstance(keywords, Iterable) and not isinstance(
             keywords, (str, bytes, bytearray)
         ):
-            normalized_result["keywords"] = [
-                str(keyword) for keyword in keywords if str(keyword).strip()
+            normalized_keywords = [
+                str(keyword).strip() for keyword in keywords if str(keyword).strip()
             ]
-        elif result.get("keyword"):
-            normalized_result["keywords"] = [str(result.get("keyword"))]
+            if normalized_keywords:
+                normalized_result["keywords"] = normalized_keywords
+        elif keywords is not None and str(keywords).strip():
+            normalized_result["keywords"] = [str(keywords).strip()]
 
         category = result.get("category")
         if isinstance(category, Iterable) and not isinstance(
