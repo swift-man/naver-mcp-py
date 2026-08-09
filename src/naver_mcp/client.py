@@ -352,6 +352,9 @@ class NaverClient:
                 for point in data:
                     if not isinstance(point, Mapping):
                         raise NaverAPIError("Naver API returned invalid DataLab data point")
+                    period = point.get("period")
+                    if not isinstance(period, str) or not period.strip():
+                        raise NaverAPIError("Naver API returned invalid DataLab period")
                     ratio = point.get("ratio")
                     if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
                         raise NaverAPIError("Naver API returned invalid DataLab ratio")

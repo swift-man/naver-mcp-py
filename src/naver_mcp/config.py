@@ -95,6 +95,28 @@ def _validate_api_base_url(value: object) -> str:
     )
 
 
+def _validate_https_url(value: object, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise ValidationError(f"{field_name} must be a valid HTTPS URL")
+    normalized = value.strip()
+    try:
+        parsed = urllib.parse.urlsplit(normalized)
+        _ = parsed.port
+    except ValueError as exc:
+        raise ValidationError(f"{field_name} must be a valid HTTPS URL") from exc
+    if (
+        normalized != value
+        or parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+        or any(character.isspace() for character in normalized)
+    ):
+        raise ValidationError(f"{field_name} must be a valid HTTPS URL")
+    return normalized
+
+
 @dataclass(frozen=True)
 class NaverMCPConfig:
     client_id: str = ""
@@ -112,6 +134,17 @@ class NaverMCPConfig:
     auth_audience: str = ""
 
     def __post_init__(self) -> None:
+        if isinstance(self.port, bool) or not isinstance(self.port, int):
+            raise ValidationError("port must be an integer between 1 and 65535")
+        if not 1 <= self.port <= 65535:
+            raise ValidationError("port must be an integer between 1 and 65535")
+        if isinstance(self.cache_ttl_sec, bool) or not isinstance(
+            self.cache_ttl_sec, int
+        ):
+            raise ValidationError("cache_ttl_sec must be a non-negative integer")
+        if self.cache_ttl_sec < 0:
+            raise ValidationError("cache_ttl_sec must be a non-negative integer")
+
         timeout = self.http_timeout_sec
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
             raise ValidationError("http_timeout_sec must be a finite positive number")
@@ -181,11 +214,10 @@ class NaverMCPConfig:
     def require_safe_remote_access(self) -> None:
         if self.remote_access == "fastmcp-auth":
             if self.auth_jwks_uri and self.auth_issuer and self.auth_audience:
-                jwks_url = urllib.parse.urlsplit(self.auth_jwks_uri)
-                if jwks_url.scheme != "https" or not jwks_url.netloc:
-                    raise ValidationError(
-                        "NAVER_MCP_AUTH_JWKS_URI must be a valid HTTPS URL"
-                    )
+                _validate_https_url(
+                    self.auth_jwks_uri,
+                    "NAVER_MCP_AUTH_JWKS_URI",
+                )
                 return
             raise ValidationError(
                 "NAVER_MCP_AUTH_JWKS_URI, NAVER_MCP_AUTH_ISSUER, and "

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -102,7 +101,7 @@ def _validate_gender(gender: object) -> str:
     return normalized
 
 
-def _validate_ages(ages: Iterable[object]) -> list[str]:
+def _validate_ages(ages: list[object]) -> list[str]:
     _validate_list_input(ages, "ages")
     normalized: list[str] = []
     seen: set[str] = set()
@@ -120,7 +119,7 @@ def _validate_ages(ages: Iterable[object]) -> list[str]:
     return normalized
 
 
-def _validate_search_trend_ages(ages: Iterable[object]) -> list[str]:
+def _validate_search_trend_ages(ages: list[object]) -> list[str]:
     _validate_list_input(ages, "search trend ages")
     normalized: list[str] = []
     seen: set[str] = set()
@@ -155,7 +154,7 @@ def _add_optional_filters(
     return payload
 
 
-def _normalize_str_list(values: Iterable[object], field_name: str) -> list[str]:
+def _normalize_str_list(values: list[object], field_name: str) -> list[str]:
     _validate_list_input(values, field_name)
     normalized: list[str] = []
     for value in values:

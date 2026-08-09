@@ -208,7 +208,7 @@ Book and shopping intents use `web` and `blog` fallback sources because the dedi
 - Temporary 5xx responses may be retried once by default.
 - Daily quota errors should not be retried automatically.
 - Errors should include a stable error code and retryable flag.
-- Cache should be conservative and time-bounded.
+- Cache should be conservative, time-bounded, and limited to 1,024 entries with LRU eviction.
 - Credential errors should surface clearly.
 - Upstream API responses should be type- and range-checked before normalization and caching.
 - Upstream redirects must preserve scheme, host, and effective port before authentication headers are forwarded.
@@ -222,6 +222,9 @@ Recommended defaults:
 - search: 5 minutes
 - spell/adult detection: 30 minutes
 - DataLab trends: 30 minutes or longer
+
+Expired entries are pruned during writes, and the least recently used entry is
+evicted when the in-memory cache reaches its 1,024-entry limit.
 
 ## Integration Guidance
 

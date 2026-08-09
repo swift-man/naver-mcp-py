@@ -76,17 +76,27 @@ class ServerContractTest(unittest.TestCase):
                 config = NaverMCPConfig(host=host, remote_access="fastmcp-auth")
                 config.require_safe_remote_access()
 
-    def test_fastmcp_auth_mode_requires_https_jwks(self) -> None:
-        config = NaverMCPConfig(
-            host="0.0.0.0",
-            remote_access="fastmcp-auth",
-            auth_jwks_uri="http://auth.example.com/.well-known/jwks.json",
-            auth_issuer="https://auth.example.com",
-            auth_audience="naver-mcp",
-        )
+    def test_fastmcp_auth_mode_requires_valid_https_jwks(self) -> None:
+        invalid_values = [
+            "http://auth.example.com/.well-known/jwks.json",
+            "https://[::1",
+            "https://auth.example.com:99999/.well-known/jwks.json",
+            "https://user:password@auth.example.com/.well-known/jwks.json",
+            "https://auth.example.com/.well-known/jwks.json#fragment",
+            "https://auth.example.com/jwks file.json",
+            " https://auth.example.com/.well-known/jwks.json",
+        ]
 
-        with self.assertRaises(ValidationError):
-            config.require_safe_remote_access()
+        for value in invalid_values:
+            config = NaverMCPConfig(
+                host="0.0.0.0",
+                remote_access="fastmcp-auth",
+                auth_jwks_uri=value,
+                auth_issuer="https://auth.example.com",
+                auth_audience="naver-mcp",
+            )
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                config.require_safe_remote_access()
 
     def test_create_server_attaches_jwt_verifier(self) -> None:
         config = NaverMCPConfig(

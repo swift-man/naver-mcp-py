@@ -173,6 +173,18 @@ class NaverClientTest(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValidationError):
                 NaverMCPConfig(http_timeout_sec=value)
 
+    def test_config_rejects_invalid_port(self) -> None:
+        for value in (0, -1, 65536, True, 1.5):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                NaverMCPConfig(port=value)  # type: ignore[arg-type]
+
+    def test_config_rejects_invalid_cache_ttl(self) -> None:
+        for value in (-1, True, 1.5):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                NaverMCPConfig(cache_ttl_sec=value)  # type: ignore[arg-type]
+
+        self.assertEqual(NaverMCPConfig(cache_ttl_sec=0).cache_ttl_sec, 0)
+
     def test_search_requests_use_api_hub_paths_and_headers(self) -> None:
         self.client.search_local(LocalSearchRequest(query="카페"))
         self.client.search_blog(BlogSearchRequest(query="카페"))
@@ -531,14 +543,26 @@ class NaverClientTest(unittest.TestCase):
             {"results": [{}]},
             {"results": [{"data": None}]},
             {"results": [{"data": [None]}]},
-            {"results": [{"data": [{"ratio": None}]}]},
-            {"results": [{"data": [{"ratio": True}]}]},
-            {"results": [{"data": [{"ratio": "12.3"}]}]},
-            {"results": [{"data": [{"ratio": float("nan")}]}]},
-            {"results": [{"data": [{"ratio": float("inf")}]}]},
-            {"results": [{"data": [{"ratio": 10**400}]}]},
-            {"results": [{"data": [{"ratio": -1}]}]},
-            {"results": [{"data": [{"ratio": 100.1}]}]},
+            {"results": [{"data": [{"ratio": 1}]}]},
+            {"results": [{"data": [{"period": None, "ratio": 1}]}]},
+            {"results": [{"data": [{"period": 20260801, "ratio": 1}]}]},
+            {"results": [{"data": [{"period": "   ", "ratio": 1}]}]},
+            {"results": [{"data": [{"period": "2026-08-01", "ratio": None}]}]},
+            {"results": [{"data": [{"period": "2026-08-01", "ratio": True}]}]},
+            {"results": [{"data": [{"period": "2026-08-01", "ratio": "12.3"}]}]},
+            {
+                "results": [
+                    {"data": [{"period": "2026-08-01", "ratio": float("nan")}]}
+                ]
+            },
+            {
+                "results": [
+                    {"data": [{"period": "2026-08-01", "ratio": float("inf")}]}
+                ]
+            },
+            {"results": [{"data": [{"period": "2026-08-01", "ratio": 10**400}]}]},
+            {"results": [{"data": [{"period": "2026-08-01", "ratio": -1}]}]},
+            {"results": [{"data": [{"period": "2026-08-01", "ratio": 100.1}]}]},
         ]
 
         for payload in payloads:
@@ -559,7 +583,11 @@ class NaverClientTest(unittest.TestCase):
         )
 
         for ratio in (0, 100):
-            response = {"results": [{"data": [{"ratio": ratio}]}]}
+            response = {
+                "results": [
+                    {"data": [{"period": "2026-08-01", "ratio": ratio}]}
+                ]
+            }
             with self.subTest(ratio=ratio):
                 client = NaverClient(
                     self.config,

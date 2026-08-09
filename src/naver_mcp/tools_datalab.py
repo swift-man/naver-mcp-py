@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from typing import Any, Callable, Optional, Protocol
 
 from .cache import TTLCache
@@ -30,8 +30,8 @@ def _require_group_mapping(value: object, field_name: str) -> Mapping[str, Any]:
     return value
 
 
-def _require_group_list(values: object, field_name: str) -> Iterable[object]:
-    if isinstance(values, (str, bytes, Mapping)) or not isinstance(values, Iterable):
+def _require_group_list(values: object, field_name: str) -> list[object]:
+    if not isinstance(values, list):
         raise ValidationError(f"{field_name} must be a list")
     return values
 
@@ -58,14 +58,18 @@ def _read_group_list(
     group: Mapping[str, Any],
     field_name: str,
     alias: Optional[str] = None,
-) -> object:
+) -> list[object]:
     if field_name in group:
         value = group[field_name]
     elif alias:
         value = group.get(alias)
     else:
         value = None
-    return [] if value is None else value
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValidationError(f"{field_name} must be a list")
+    return value
 
 
 class DataLabClientProtocol(Protocol):

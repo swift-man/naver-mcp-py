@@ -692,6 +692,9 @@ Suggested defaults:
 - spell check and adult detection: 30 minutes
 - DataLab tools: 30 minutes or longer
 
+The process-local cache is bounded to 1,024 entries. Writes prune expired entries,
+and capacity pressure evicts the least recently used entry.
+
 ## Backward Compatibility
 
 - additive fields are allowed

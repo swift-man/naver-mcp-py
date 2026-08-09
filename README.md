@@ -119,6 +119,7 @@ naver-mcp-py/
     tools_search.py
   tests/
     test_client.py
+    test_cache.py
     test_normalize.py
     test_server.py
     test_smoke_live.py
@@ -166,13 +167,13 @@ Available environment variables:
 - `NAVER_API_HUB_CLIENT_SECRET`
 - `NAVER_API_BASE_URL` (optional; defaults to `https://naverapihub.apigw.ntruss.com`; HTTPS required except for loopback testing)
 - `NAVER_MCP_HOST`
-- `NAVER_MCP_PORT`
+- `NAVER_MCP_PORT` (integer from `1` through `65535`)
 - `NAVER_MCP_PATH`
 - `NAVER_MCP_TRANSPORT`
 - `NAVER_MCP_REMOTE_ACCESS` (optional; `disabled`, `fastmcp-auth`, or `trusted-network`)
 - `NAVER_MCP_AUTH_JWKS_URI`, `NAVER_MCP_AUTH_ISSUER`, and `NAVER_MCP_AUTH_AUDIENCE` when using JWT authentication
 - `NAVER_HTTP_TIMEOUT_SEC`
-- `NAVER_CACHE_TTL_SEC`
+- `NAVER_CACHE_TTL_SEC` (non-negative integer; `0` disables the default search cache)
 
 You can use `.env.example` as a template, but the current code does not auto-load `.env`.
 On Linux servers, export the variables explicitly or load them through your process manager such as `systemd`.
@@ -186,6 +187,7 @@ Security note:
 - legacy `NAVER_CLIENT_ID` and `NAVER_CLIENT_SECRET` variable names remain accepted as aliases, but the values must be NAVER API HUB credentials
 - upstream `NAVER_API_BASE_URL` overrides must use HTTPS; plain HTTP is accepted only for explicit loopback hosts during local testing
 - upstream redirects are followed only within the same scheme, host, and effective port so credentials cannot cross origins or downgrade to HTTP
+- in-memory cache entries are limited to 1,024 and evicted by least-recently-used order
 - HTTP binding to a non-loopback address is refused unless authenticated FastMCP or an explicitly protected trusted network is configured
 
 Example:
