@@ -20,3 +20,6 @@ All notable changes to this project are documented in this file.
 ### Fixed
 
 - Retry temporary 5xx failures while returning authentication and daily-quota errors without an immediate retry.
+- Return structured MCP errors for validation, authentication, quota, timeout, and retired-service failures.
+- Reject scalar DataLab list inputs and reversed date ranges before sending an API request.
+- Prevent arbitrary long numeric queries from being classified as ISBN searches without a valid checksum.

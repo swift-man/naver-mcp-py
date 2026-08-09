@@ -6,15 +6,15 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Callable, Mapping, NoReturn, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from .config import NaverMCPConfig
 from .errors import (
     NaverAPIError,
     NaverAuthError,
     NaverRateLimitError,
-    NaverServiceUnavailableError,
     NaverTimeoutError,
+    raise_retired_search,
 )
 from .models import (
     BlogSearchRequest,
@@ -55,7 +55,7 @@ class NaverClient:
         self.config = config
         self._transport = transport or self._default_transport
         self._sleep_fn = sleep_fn or time.sleep
-        self._max_retries = max(1, max_retries)
+        self._max_retries = max(0, max_retries)
 
     def search_local(self, request: LocalSearchRequest) -> Mapping[str, Any]:
         return self._request_json("GET", "search/v1/local", params=request.to_params())
@@ -83,13 +83,13 @@ class NaverClient:
         return self._request_json("GET", "search/v1/image", params=request.to_params())
 
     def search_book(self, request: BookSearchRequest) -> Mapping[str, Any]:
-        self._raise_retired_search("search_book")
+        raise_retired_search("search_book")
 
     def search_book_advanced(
         self,
         request: BookAdvancedSearchRequest,
     ) -> Mapping[str, Any]:
-        self._raise_retired_search("search_book_advanced")
+        raise_retired_search("search_book_advanced")
 
     def search_encyc(self, request: EncycSearchRequest) -> Mapping[str, Any]:
         return self._request_json(
@@ -102,10 +102,10 @@ class NaverClient:
         return self._request_json("GET", "search/v1/kin", params=request.to_params())
 
     def search_shop(self, request: ShopSearchRequest) -> Mapping[str, Any]:
-        self._raise_retired_search("search_shop")
+        raise_retired_search("search_shop")
 
     def search_doc(self, request: DocSearchRequest) -> Mapping[str, Any]:
-        self._raise_retired_search("search_doc")
+        raise_retired_search("search_doc")
 
     def spell_check(self, request: QueryOnlyRequest) -> Mapping[str, Any]:
         return self._request_json("GET", "search/v1/errata", params=request.to_params())
@@ -218,7 +218,8 @@ class NaverClient:
         if payload is not None:
             headers["Content-Type"] = "application/json"
 
-        for attempt in range(1, self._max_retries + 1):
+        # max_retries는 최초 요청 이후 허용할 추가 시도 횟수다.
+        for attempt in range(self._max_retries + 1):
             try:
                 return self._transport(
                     method,
@@ -227,11 +228,11 @@ class NaverClient:
                     body,
                     self.config.http_timeout_sec,
                 )
-            except (NaverTimeoutError, NaverAPIError) as exc:
-                # timeout과 일시적 5xx만 재시도하고 일일 한도 초과는 즉시 반환한다.
+            except NaverAPIError as exc:
+                # 일시적 5xx만 재시도하고 timeout과 일일 한도 초과는 즉시 반환한다.
                 if not exc.is_retryable or attempt >= self._max_retries:
                     raise
-                self._sleep_fn(min(0.2 * attempt, 1.0))
+                self._sleep_fn(min(0.2 * (attempt + 1), 1.0))
 
         raise NaverAPIError("Naver API request failed")
 
@@ -326,10 +327,3 @@ class NaverClient:
         if message:
             return str(message)
         return fallback
-
-    @staticmethod
-    def _raise_retired_search(tool_name: str) -> NoReturn:
-        raise NaverServiceUnavailableError(
-            f"{tool_name} is unavailable because Naver ended the underlying "
-            "book, shopping, and professional document search APIs on 2026-07-31"
-        )

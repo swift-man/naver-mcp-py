@@ -3,7 +3,7 @@
 Python FastMCP server and reusable client library for NAVER API HUB Search,
 Search Trend, and Shopping Insight APIs.
 
-The current codebase is designed to run cleanly on Linux servers with Python 3.9+ and uses the standard library HTTP stack for API calls.
+The current codebase is designed to run cleanly on Linux servers with Python 3.10+ and uses the standard library HTTP stack for API calls.
 
 ## Goals
 
@@ -128,7 +128,7 @@ naver-mcp-py/
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.10+
 - NAVER API HUB Client ID and Client Secret
 - Search, Search Trend, and Shopping Insight permissions selected for the application
 - Linux server only if you plan to run it as a long-lived service
@@ -271,6 +271,7 @@ python3 -m venv .venv
 Create `/etc/naver-mcp.env`:
 
 ```bash
+sudo install -m 600 -o root -g root /dev/null /etc/naver-mcp.env
 sudo tee /etc/naver-mcp.env > /dev/null <<'EOF'
 NAVER_API_HUB_CLIENT_ID=your_client_id
 NAVER_API_HUB_CLIENT_SECRET=your_client_secret
@@ -281,7 +282,12 @@ NAVER_MCP_TRANSPORT=streamable-http
 NAVER_HTTP_TIMEOUT_SEC=8.0
 NAVER_CACHE_TTL_SEC=300
 EOF
+sudo chown root:root /etc/naver-mcp.env
+sudo chmod 600 /etc/naver-mcp.env
+sudo stat -c '%U:%G %a %n' /etc/naver-mcp.env
 ```
+
+The verification output must show `root:root 600 /etc/naver-mcp.env`.
 
 This file should stay on the server only and must not be copied into the repository.
 
@@ -344,11 +350,12 @@ ss -ltnp | grep 8100
 cd /home/<USER>/naver-mcp-py
 git pull origin main
 .venv/bin/pip install -e ".[server]"
+sudoedit /etc/naver-mcp.env
 sudo systemctl restart naver-mcp
 sudo systemctl status naver-mcp --no-pager
 ```
 
-When migrating from the old Naver developer API, replace the credential entries in `/etc/naver-mcp.env` with `NAVER_API_HUB_CLIENT_ID` and `NAVER_API_HUB_CLIENT_SECRET` before restarting.
+When migrating from the old Naver developer API, replace the credential entries with `NAVER_API_HUB_CLIENT_ID` and `NAVER_API_HUB_CLIENT_SECRET` in the `sudoedit` step. Save them before running the restart command.
 
 ## MCP Client URL
 

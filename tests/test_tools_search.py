@@ -33,9 +33,11 @@ from naver_mcp.tools_search import SearchTools
 class FakeSearchClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
+        self.last_local_display: int | None = None
 
     def search_local(self, request: LocalSearchRequest) -> Mapping[str, Any]:
         self.calls.append(("local", request.query))
+        self.last_local_display = request.display
         return {
             "total": 1,
             "start": request.start,
@@ -409,6 +411,16 @@ class SearchToolsTest(unittest.TestCase):
         self.assertTrue(result["meta"]["fallback"])
         self.assertEqual(result["meta"]["fallback_reason"], "source_api_retired")
 
+    def test_search_naver_auto_routes_valid_isbn(self) -> None:
+        result = self.tools.search_naver_auto(query="978-0-13-235088-4", display=5)
+
+        self.assertEqual(result["intent"], "book_search")
+
+    def test_search_naver_auto_does_not_treat_phone_number_as_isbn(self) -> None:
+        result = self.tools.search_naver_auto(query="010" + "1234" + "5678", display=5)
+
+        self.assertEqual(result["intent"], "general_web")
+
     def test_search_naver_auto_routes_shopping_queries_to_fallback(self) -> None:
         result = self.tools.search_naver_auto(query="무선 이어폰 최저가", display=5)
 
@@ -441,6 +453,7 @@ class SearchToolsTest(unittest.TestCase):
 
         self.assertEqual(result["meta"]["display"], 10)
         self.assertIn(("local", "판교 맛집"), self.client.calls)
+        self.assertEqual(self.client.last_local_display, 5)
 
     def test_search_web_validates_empty_query(self) -> None:
         with self.assertRaises(ValidationError):

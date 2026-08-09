@@ -5,6 +5,7 @@ from typing import Any, Optional
 from .cache import TTLCache
 from .client import NaverClient
 from .config import NaverMCPConfig
+from .errors import NaverMCPError
 from .tools_datalab import DataLabTools
 from .tools_search import SearchTools
 
@@ -12,6 +13,25 @@ try:
     from fastmcp import FastMCP
 except ImportError:  # pragma: no cover - optional runtime dependency
     FastMCP = None  # type: ignore[assignment]
+
+
+class _ToolErrorBoundary:
+    def __init__(self, tools: Any) -> None:
+        self._tools = tools
+
+    def __getattr__(self, name: str) -> Any:
+        tool = getattr(self._tools, name)
+        if not callable(tool):
+            return tool
+
+        def call(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return tool(*args, **kwargs)
+            except NaverMCPError as exc:
+                # MCP 클라이언트가 안정적인 코드로 분기할 수 있도록 도메인 오류를 보존한다.
+                return exc.to_dict()
+
+        return call
 
 
 def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
@@ -23,12 +43,14 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
     # 서버는 요청 객체 생성과 도구 등록만 맡고, 실제 비즈니스 로직은 tools 계층으로 위임한다.
     resolved_config = config or NaverMCPConfig.from_env()
     client = NaverClient(resolved_config)
-    search_tools = SearchTools(
-        client,
-        cache=TTLCache(default_ttl_sec=resolved_config.cache_ttl_sec),
-        config=resolved_config,
+    search_tools = _ToolErrorBoundary(
+        SearchTools(
+            client,
+            cache=TTLCache(default_ttl_sec=resolved_config.cache_ttl_sec),
+            config=resolved_config,
+        )
     )
-    datalab_tools = DataLabTools(client, config=resolved_config)
+    datalab_tools = _ToolErrorBoundary(DataLabTools(client, config=resolved_config))
 
     server = FastMCP("naver-mcp-py")
 
@@ -104,7 +126,10 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         start: int = 1,
         sort: str = "sim",
     ) -> dict[str, Any]:
-        """지원 종료된 네이버 책 검색 도구 이름을 호환 목적으로 유지합니다."""
+        """[지원 종료] 항상 NAVER_SERVICE_UNAVAILABLE 오류를 반환합니다.
+
+        도서 검색은 search_web 또는 search_naver_auto를 사용하세요.
+        """
         return search_tools.search_book(query=query, display=display, start=start, sort=sort)
 
     @server.tool()
@@ -116,7 +141,10 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         title: str = "",
         isbn: str = "",
     ) -> dict[str, Any]:
-        """지원 종료된 네이버 책 상세 검색 도구 이름을 호환 목적으로 유지합니다."""
+        """[지원 종료] 항상 NAVER_SERVICE_UNAVAILABLE 오류를 반환합니다.
+
+        도서 검색은 search_web 또는 search_naver_auto를 사용하세요.
+        """
         return search_tools.search_book_advanced(
             query=query,
             display=display,
@@ -152,7 +180,10 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         filter: str = "",
         exclude: str = "",
     ) -> dict[str, Any]:
-        """지원 종료된 네이버 쇼핑 상품 검색 도구 이름을 호환 목적으로 유지합니다."""
+        """[지원 종료] 항상 NAVER_SERVICE_UNAVAILABLE 오류를 반환합니다.
+
+        상품 검색은 search_web 또는 search_naver_auto를 사용하세요.
+        """
         return search_tools.search_shop(
             query=query,
             display=display,
@@ -168,7 +199,10 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
         display: int = 5,
         start: int = 1,
     ) -> dict[str, Any]:
-        """지원 종료된 네이버 전문자료 검색 도구 이름을 호환 목적으로 유지합니다."""
+        """[지원 종료] 항상 NAVER_SERVICE_UNAVAILABLE 오류를 반환합니다.
+
+        전문자료 검색은 search_web을 사용하세요.
+        """
         return search_tools.search_doc(query=query, display=display, start=start)
 
     @server.tool()

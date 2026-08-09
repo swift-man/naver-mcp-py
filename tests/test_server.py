@@ -84,7 +84,40 @@ class ServerContractTest(unittest.TestCase):
             )
 
         for name in ("search_book", "search_book_advanced", "search_shop", "search_doc"):
-            self.assertIn("지원 종료", server.tools[name].__doc__ or "")
+            description = server.tools[name].__doc__ or ""
+            self.assertIn("지원 종료", description)
+            self.assertIn("항상 NAVER_SERVICE_UNAVAILABLE", description)
+            self.assertIn("사용하세요", description)
+
+    def test_retired_tool_returns_structured_error(self) -> None:
+        with patch("naver_mcp.server.FastMCP", FakeFastMCP):
+            server = create_server(
+                NaverMCPConfig(client_id="client-id", client_secret="client-secret")
+            )
+
+        retired_calls = [
+            lambda: server.tools["search_book"]("파이썬"),
+            lambda: server.tools["search_book_advanced"](title="클린 코드"),
+            lambda: server.tools["search_shop"]("무선 이어폰"),
+            lambda: server.tools["search_doc"]("생성형 AI"),
+        ]
+
+        for call in retired_calls:
+            with self.subTest(call=call):
+                result = call()
+                self.assertEqual(result["error"]["code"], "NAVER_SERVICE_UNAVAILABLE")
+                self.assertFalse(result["error"]["retryable"])
+
+    def test_validation_error_returns_structured_error(self) -> None:
+        with patch("naver_mcp.server.FastMCP", FakeFastMCP):
+            server = create_server(
+                NaverMCPConfig(client_id="client-id", client_secret="client-secret")
+            )
+
+        result = server.tools["search_local"]("판교 맛집", display=6)
+
+        self.assertEqual(result["error"]["code"], "VALIDATION_ERROR")
+        self.assertFalse(result["error"]["retryable"])
 
 
 if __name__ == "__main__":

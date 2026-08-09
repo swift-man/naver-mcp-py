@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Callable, Mapping, NoReturn, Optional, Protocol
+from typing import Any, Callable, Mapping, Optional, Protocol
 
 from .cache import TTLCache
 from .config import NaverMCPConfig
-from .errors import NaverServiceUnavailableError
+from .errors import raise_retired_search
 from .models import (
     BlogSearchRequest,
     BookAdvancedSearchRequest,
@@ -123,7 +123,9 @@ class SearchTools:
     )
     BOOK_HINTS = ("책", "도서", "서적", "isbn", "작가", "출판사")
     SHOP_HINTS = ("최저가", "가격", "구매", "할인", "쇼핑", "상품", "판매")
-    ISBN_RE = re.compile(r"(97[89][-\s]?)?\d{9,13}")
+    ISBN_CANDIDATE_RE = re.compile(
+        r"(?<!\w)(?:97[89](?:[-\s]?\d){10}|(?:\d[-\s]?){9}[\dXx])(?!\w)"
+    )
 
     def __init__(
         self,
@@ -226,7 +228,7 @@ class SearchTools:
         start: int = 1,
         sort: str = "sim",
     ) -> dict[str, Any]:
-        self._raise_retired_search("search_book")
+        raise_retired_search("search_book")
 
     def search_book_advanced(
         self,
@@ -238,7 +240,7 @@ class SearchTools:
         title: str = "",
         isbn: str = "",
     ) -> dict[str, Any]:
-        self._raise_retired_search("search_book_advanced")
+        raise_retired_search("search_book_advanced")
 
     def search_encyc(
         self,
@@ -271,7 +273,7 @@ class SearchTools:
         filter: str = "",
         exclude: str = "",
     ) -> dict[str, Any]:
-        self._raise_retired_search("search_shop")
+        raise_retired_search("search_shop")
 
     def search_doc(
         self,
@@ -280,7 +282,7 @@ class SearchTools:
         display: int = 5,
         start: int = 1,
     ) -> dict[str, Any]:
-        self._raise_retired_search("search_doc")
+        raise_retired_search("search_doc")
 
     def spell_check(self, *, query: str) -> dict[str, Any]:
         request = QueryOnlyRequest(query=query)
@@ -388,7 +390,9 @@ class SearchTools:
         lowered = query.lower()
         if any(keyword in lowered for keyword in self.NEWS_HINTS):
             return "news_search"
-        if any(keyword in lowered for keyword in self.BOOK_HINTS) or self.ISBN_RE.search(query):
+        if any(keyword in lowered for keyword in self.BOOK_HINTS) or self._contains_valid_isbn(
+            query
+        ):
             return "book_search"
         if any(keyword in lowered for keyword in self.SHOP_HINTS):
             return "shopping_search"
@@ -513,12 +517,23 @@ class SearchTools:
             },
         ]
 
-    @staticmethod
-    def _raise_retired_search(tool_name: str) -> NoReturn:
-        raise NaverServiceUnavailableError(
-            f"{tool_name} is unavailable because Naver ended the underlying "
-            "book, shopping, and professional document search APIs on 2026-07-31"
-        )
+    @classmethod
+    def _contains_valid_isbn(cls, query: str) -> bool:
+        # 숫자 길이만 보지 않고 ISBN 체크섬까지 확인해 전화번호와 주문번호 오분류를 줄인다.
+        for match in cls.ISBN_CANDIDATE_RE.finditer(query):
+            candidate = re.sub(r"[-\s]", "", match.group(0)).upper()
+            if len(candidate) == 10:
+                digits = [10 if value == "X" else int(value) for value in candidate]
+                if sum((10 - index) * value for index, value in enumerate(digits)) % 11 == 0:
+                    return True
+            elif len(candidate) == 13:
+                checksum = sum(
+                    int(value) * (1 if index % 2 == 0 else 3)
+                    for index, value in enumerate(candidate[:12])
+                )
+                if (10 - checksum % 10) % 10 == int(candidate[-1]):
+                    return True
+        return False
 
     def _merge_auto_results(
         self,

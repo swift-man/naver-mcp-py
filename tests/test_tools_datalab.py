@@ -396,6 +396,64 @@ class DataLabToolsTest(unittest.TestCase):
                 ages=["20"],
             )
 
+    def test_datalab_search_trends_rejects_scalar_ages(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.tools.datalab_search_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                keyword_groups=[{"group_name": "파이썬", "keywords": ["파이썬"]}],
+                ages="34",  # type: ignore[arg-type]
+            )
+
+    def test_datalab_search_trends_rejects_scalar_keywords(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.tools.datalab_search_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                keyword_groups=[{"group_name": "파이썬", "keywords": "파이썬"}],
+            )
+
+    def test_datalab_shopping_rejects_scalar_nested_params(self) -> None:
+        invalid_calls = [
+            lambda: self.tools.datalab_shopping_category_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                categories=[{"name": "패션의류", "params": "50000000"}],
+            ),
+            lambda: self.tools.datalab_shopping_keyword_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                category="50000000",
+                keywords=[{"name": "러닝화", "params": "러닝화"}],
+            ),
+        ]
+
+        for call in invalid_calls:
+            with self.subTest(call=call), self.assertRaises(ValidationError):
+                call()
+
+    def test_datalab_rejects_reversed_date_range(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.tools.datalab_search_trends(
+                start_date="2026-03-19",
+                end_date="2026-03-18",
+                time_unit="date",
+                keyword_groups=[{"group_name": "파이썬", "keywords": ["파이썬"]}],
+            )
+
+    def test_datalab_rejects_non_canonical_date_format(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.tools.datalab_search_trends(
+                start_date="2026-3-01",
+                end_date="2026-10-01",
+                time_unit="date",
+                keyword_groups=[{"group_name": "파이썬", "keywords": ["파이썬"]}],
+            )
+
     def test_datalab_search_trends_limits_keywords_per_group(self) -> None:
         with self.assertRaises(ValidationError):
             self.tools.datalab_search_trends(

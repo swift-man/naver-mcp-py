@@ -18,6 +18,7 @@ from naver_mcp.errors import (
     NaverAuthError,
     NaverRateLimitError,
     NaverServiceUnavailableError,
+    NaverTimeoutError,
 )
 from naver_mcp.models import (
     BlogSearchRequest,
@@ -292,6 +293,61 @@ class NaverClientTest(unittest.TestCase):
         self.assertEqual(calls, 2)
         self.assertEqual(sleeps, [0.2])
 
+    def test_default_retry_count_retries_once(self) -> None:
+        calls = 0
+        sleeps: list[float] = []
+
+        def transport(
+            method: str,
+            url: str,
+            headers: Mapping[str, str],
+            body: Optional[bytes],
+            timeout: float,
+        ) -> Mapping[str, Any]:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise NaverAPIError("temporary server error", retryable=True)
+            return {}
+
+        client = NaverClient(
+            self.config,
+            transport=transport,
+            sleep_fn=sleeps.append,
+        )
+
+        client.search_blog(BlogSearchRequest(query="네이버"))
+
+        self.assertEqual(calls, 2)
+        self.assertEqual(sleeps, [0.2])
+
+    def test_timeout_fails_fast_without_retry(self) -> None:
+        calls = 0
+        sleeps: list[float] = []
+
+        def transport(
+            method: str,
+            url: str,
+            headers: Mapping[str, str],
+            body: Optional[bytes],
+            timeout: float,
+        ) -> Mapping[str, Any]:
+            nonlocal calls
+            calls += 1
+            raise NaverTimeoutError("Naver API request timed out")
+
+        client = NaverClient(
+            self.config,
+            transport=transport,
+            sleep_fn=sleeps.append,
+        )
+
+        with self.assertRaises(NaverTimeoutError):
+            client.search_blog(BlogSearchRequest(query="네이버"))
+
+        self.assertEqual(calls, 1)
+        self.assertEqual(sleeps, [])
+
     def test_non_retryable_auth_error_is_not_retried(self) -> None:
         calls = 0
         sleeps: list[float] = []
@@ -347,6 +403,9 @@ class NaverClientTest(unittest.TestCase):
 
         self.assertEqual(calls, 1)
         self.assertEqual(sleeps, [])
+        error = NaverRateLimitError("Daily quota exceeded")
+        self.assertFalse(error.is_retryable)
+        self.assertFalse(error.to_dict()["error"]["retryable"])
 
 
 if __name__ == "__main__":

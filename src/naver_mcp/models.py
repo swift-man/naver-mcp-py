@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterable
 
 from .errors import ValidationError
 
@@ -57,10 +57,20 @@ def _validate_sort(sort: str, allowed: set[str]) -> str:
 def _validate_iso_date(value: str, field_name: str) -> str:
     normalized = _validate_non_empty(value, field_name)
     try:
-        datetime.strptime(normalized, "%Y-%m-%d")
+        parsed = datetime.strptime(normalized, "%Y-%m-%d")
     except ValueError as exc:
         raise ValidationError(f"{field_name} must be in YYYY-MM-DD format") from exc
+    if parsed.strftime("%Y-%m-%d") != normalized:
+        raise ValidationError(f"{field_name} must be in YYYY-MM-DD format")
     return normalized
+
+
+def _validate_date_range(start_date: str, end_date: str) -> tuple[str, str]:
+    normalized_start = _validate_iso_date(start_date, "start_date")
+    normalized_end = _validate_iso_date(end_date, "end_date")
+    if normalized_start > normalized_end:
+        raise ValidationError("start_date must not be later than end_date")
+    return normalized_start, normalized_end
 
 
 def _validate_time_unit(time_unit: str) -> str:
@@ -85,10 +95,13 @@ def _validate_gender(gender: str) -> str:
 
 
 def _validate_ages(ages: Iterable[object]) -> list[str]:
+    _validate_list_input(ages, "ages")
     normalized: list[str] = []
     seen: set[str] = set()
     for age in ages:
-        value = str(age).strip()
+        if not isinstance(age, str):
+            raise ValidationError("ages must contain only strings")
+        value = age.strip()
         if not value:
             continue
         if value not in VALID_AGES:
@@ -100,10 +113,13 @@ def _validate_ages(ages: Iterable[object]) -> list[str]:
 
 
 def _validate_search_trend_ages(ages: Iterable[object]) -> list[str]:
+    _validate_list_input(ages, "search trend ages")
     normalized: list[str] = []
     seen: set[str] = set()
     for age in ages:
-        value = str(age).strip()
+        if not isinstance(age, str):
+            raise ValidationError("search trend ages must contain only strings")
+        value = age.strip()
         if not value:
             continue
         if value not in VALID_SEARCH_TREND_AGES:
@@ -132,10 +148,22 @@ def _add_optional_filters(
 
 
 def _normalize_str_list(values: Iterable[object], field_name: str) -> list[str]:
-    normalized = [str(value).strip() for value in values if str(value).strip()]
+    _validate_list_input(values, field_name)
+    normalized: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            raise ValidationError(f"{field_name} must contain only strings")
+        stripped = value.strip()
+        if stripped:
+            normalized.append(stripped)
     if not normalized:
         raise ValidationError(f"{field_name} must not be empty")
     return normalized
+
+
+def _validate_list_input(values: object, field_name: str) -> None:
+    if isinstance(values, (str, bytes, Mapping)) or not isinstance(values, Iterable):
+        raise ValidationError(f"{field_name} must be a list")
 
 
 def _validate_shop_filter(value: str) -> str:
@@ -366,8 +394,9 @@ class DataLabSearchTrendsRequest:
     ages: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "start_date", _validate_iso_date(self.start_date, "start_date"))
-        object.__setattr__(self, "end_date", _validate_iso_date(self.end_date, "end_date"))
+        start_date, end_date = _validate_date_range(self.start_date, self.end_date)
+        object.__setattr__(self, "start_date", start_date)
+        object.__setattr__(self, "end_date", end_date)
         object.__setattr__(self, "time_unit", _validate_time_unit(self.time_unit))
         if not self.keyword_groups:
             raise ValidationError("keyword_groups must not be empty")
@@ -435,8 +464,9 @@ class DataLabShoppingCategoryTrendsRequest:
     ages: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "start_date", _validate_iso_date(self.start_date, "start_date"))
-        object.__setattr__(self, "end_date", _validate_iso_date(self.end_date, "end_date"))
+        start_date, end_date = _validate_date_range(self.start_date, self.end_date)
+        object.__setattr__(self, "start_date", start_date)
+        object.__setattr__(self, "end_date", end_date)
         object.__setattr__(self, "time_unit", _validate_time_unit(self.time_unit))
         if not self.categories:
             raise ValidationError("categories must not be empty")
@@ -472,8 +502,9 @@ class DataLabShoppingCategoryDetailRequest:
     ages: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "start_date", _validate_iso_date(self.start_date, "start_date"))
-        object.__setattr__(self, "end_date", _validate_iso_date(self.end_date, "end_date"))
+        start_date, end_date = _validate_date_range(self.start_date, self.end_date)
+        object.__setattr__(self, "start_date", start_date)
+        object.__setattr__(self, "end_date", end_date)
         object.__setattr__(self, "time_unit", _validate_time_unit(self.time_unit))
         object.__setattr__(self, "category", _validate_non_empty(self.category, "category"))
         object.__setattr__(self, "device", _validate_device(self.device))
@@ -507,8 +538,9 @@ class DataLabShoppingKeywordTrendsRequest:
     ages: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "start_date", _validate_iso_date(self.start_date, "start_date"))
-        object.__setattr__(self, "end_date", _validate_iso_date(self.end_date, "end_date"))
+        start_date, end_date = _validate_date_range(self.start_date, self.end_date)
+        object.__setattr__(self, "start_date", start_date)
+        object.__setattr__(self, "end_date", end_date)
         object.__setattr__(self, "time_unit", _validate_time_unit(self.time_unit))
         object.__setattr__(self, "category", _validate_non_empty(self.category, "category"))
         if not self.keywords:
@@ -547,8 +579,9 @@ class DataLabShoppingKeywordDetailRequest:
     ages: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "start_date", _validate_iso_date(self.start_date, "start_date"))
-        object.__setattr__(self, "end_date", _validate_iso_date(self.end_date, "end_date"))
+        start_date, end_date = _validate_date_range(self.start_date, self.end_date)
+        object.__setattr__(self, "start_date", start_date)
+        object.__setattr__(self, "end_date", end_date)
         object.__setattr__(self, "time_unit", _validate_time_unit(self.time_unit))
         object.__setattr__(self, "category", _validate_non_empty(self.category, "category"))
         object.__setattr__(self, "keyword", _validate_non_empty(self.keyword, "keyword"))

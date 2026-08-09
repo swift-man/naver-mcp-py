@@ -144,6 +144,7 @@ Defines:
 
 - FastMCP server object
 - MCP tool registration
+- a common boundary that converts `NaverMCPError` exceptions into structured tool responses
 - main process entry point
 - a lightweight `healthz()` helper for embedding scenarios
 
@@ -200,7 +201,9 @@ Book and shopping intents use `web` and `blog` fallback sources because the dedi
 
 ## Reliability Policy
 
-- Search tools should fail fast on timeout.
+- Socket timeouts should fail fast without an immediate retry.
+- Temporary 5xx responses may be retried once by default.
+- Daily quota errors should not be retried automatically.
 - Errors should include a stable error code and retryable flag.
 - Cache should be conservative and time-bounded.
 - Credential errors should surface clearly.

@@ -345,6 +345,17 @@ Output:
 }
 ```
 
+`meta.fallback_reason` is present only when `meta.fallback` is `true`. Its
+currently supported value is `source_api_retired` for book and shopping routes
+that use fallback sources because the original source API was retired.
+
+```json
+{
+  "fallback": true,
+  "fallback_reason": "source_api_retired"
+}
+```
+
 Requirements:
 
 - the selected intent must be disclosed
@@ -611,7 +622,7 @@ Input:
 - `search_local.display` must be between `1` and `5`
 - `search_local.start` must be `1`
 - `search_image.filter` must be one of `all`, `large`, `medium`, `small`
-- `start_date` and `end_date` must be valid `YYYY-MM-DD`
+- `start_date` and `end_date` must be valid `YYYY-MM-DD`, and `start_date` must not be later than `end_date`
 - `time_unit` must be one of `date`, `week`, `month`
 - `keyword_groups` must contain 1 through 5 groups for `datalab_search_trends`
 - Search Trend `ages` must contain only codes `1` through `11`
@@ -621,6 +632,7 @@ Input:
 - `device` must be one of `""`, `pc`, `mo`
 - `gender` must be one of `""`, `m`, `f`
 - `ages` must contain only `10`, `20`, `30`, `40`, `50`, `60`
+- `ages`, group `keywords`, and group `params` must be JSON arrays of strings, not scalar strings
 
 ## Error Shape
 
@@ -644,6 +656,10 @@ Recommended codes:
 - `NAVER_API_ERROR`
 - `NAVER_SERVICE_UNAVAILABLE`
 - `VALIDATION_ERROR`
+
+`NAVER_RATE_LIMIT` represents the API HUB daily quota response and returns
+`retryable: false`. `NAVER_TIMEOUT` and temporary 5xx `NAVER_API_ERROR`
+responses may return `retryable: true`.
 
 ## Timeout Guidance
 

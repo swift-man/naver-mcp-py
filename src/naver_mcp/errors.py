@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import NoReturn, Optional
 
 
 @dataclass(frozen=True)
@@ -58,7 +58,7 @@ class NaverAuthError(NaverMCPError):
 
 class NaverRateLimitError(NaverMCPError):
     code = "NAVER_RATE_LIMIT"
-    retryable = True
+    retryable = False
 
 
 class NaverTimeoutError(NaverMCPError):
@@ -74,3 +74,15 @@ class NaverAPIError(NaverMCPError):
 class NaverServiceUnavailableError(NaverMCPError):
     code = "NAVER_SERVICE_UNAVAILABLE"
     retryable = False
+
+
+RETIRED_SEARCH_NOTICE = (
+    "book, shopping, and professional document search APIs on 2026-07-31"
+)
+
+
+def raise_retired_search(tool_name: str) -> NoReturn:
+    raise NaverServiceUnavailableError(
+        f"{tool_name} is unavailable because Naver ended the underlying "
+        f"{RETIRED_SEARCH_NOTICE}"
+    )
