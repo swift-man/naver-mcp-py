@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any, Callable, Optional, Protocol
 
 from .cache import TTLCache
@@ -30,13 +30,19 @@ def _require_group_mapping(value: object, field_name: str) -> Mapping[str, Any]:
     return value
 
 
+def _require_group_list(values: object, field_name: str) -> Iterable[object]:
+    if isinstance(values, (str, bytes, Mapping)) or not isinstance(values, Iterable):
+        raise ValidationError(f"{field_name} must be a list")
+    return values
+
+
 def _read_group_text(
     group: Mapping[str, Any],
     field_name: str,
     alias: Optional[str] = None,
 ) -> str:
     value = group.get(field_name)
-    if not value and alias:
+    if value is None and alias:
         value = group.get(alias)
     if value is None:
         return ""
@@ -51,7 +57,7 @@ def _read_group_list(
     alias: Optional[str] = None,
 ) -> object:
     value = group.get(field_name)
-    if not value and alias:
+    if value is None and alias:
         value = group.get(alias)
     return [] if value is None else value
 
@@ -137,7 +143,7 @@ class DataLabTools:
     ) -> dict[str, Any]:
         # 외부 입력은 dict로 받고, 내부에서는 검증 가능한 요청 모델로 즉시 변환한다.
         groups: list[DataLabKeywordGroup] = []
-        for value in keyword_groups:
+        for value in _require_group_list(keyword_groups, "keyword_groups"):
             group = _require_group_mapping(value, "keyword_groups")
             groups.append(
                 DataLabKeywordGroup(
@@ -419,7 +425,7 @@ class DataLabTools:
         ages: Optional[list[str]],
     ) -> DataLabShoppingCategoryTrendsRequest:
         category_groups: list[DataLabCategoryGroup] = []
-        for value in categories:
+        for value in _require_group_list(categories, "categories"):
             group = _require_group_mapping(value, "categories")
             category_groups.append(
                 DataLabCategoryGroup(
@@ -472,7 +478,7 @@ class DataLabTools:
     ) -> DataLabShoppingKeywordTrendsRequest:
         # category/param 이름 차이를 여기서 흡수해 MCP 입력 형태를 단순하게 유지한다.
         keyword_groups: list[DataLabShoppingKeywordGroup] = []
-        for value in keywords:
+        for value in _require_group_list(keywords, "keywords"):
             group = _require_group_mapping(value, "keywords")
             keyword_groups.append(
                 DataLabShoppingKeywordGroup(

@@ -415,6 +415,48 @@ class DataLabToolsTest(unittest.TestCase):
                 keyword_groups=[{"group_name": "파이썬", "keywords": "파이썬"}],
             )
 
+    def test_datalab_rejects_non_iterable_group_collections(self) -> None:
+        invalid_calls = [
+            lambda: self.tools.datalab_search_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                keyword_groups=None,  # type: ignore[arg-type]
+            ),
+            lambda: self.tools.datalab_shopping_category_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                categories=42,  # type: ignore[arg-type]
+            ),
+            lambda: self.tools.datalab_shopping_keyword_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                category="50000000",
+                keywords=None,  # type: ignore[arg-type]
+            ),
+        ]
+
+        for call in invalid_calls:
+            with self.subTest(call=call), self.assertRaises(ValidationError):
+                call()
+
+    def test_datalab_canonical_group_field_is_not_overridden_by_alias(self) -> None:
+        with self.assertRaises(ValidationError):
+            self.tools.datalab_search_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                keyword_groups=[
+                    {
+                        "group_name": "",
+                        "groupName": "alias-name",
+                        "keywords": ["파이썬"],
+                    }
+                ],
+            )
+
     def test_datalab_shopping_rejects_scalar_nested_params(self) -> None:
         invalid_calls = [
             lambda: self.tools.datalab_shopping_category_trends(
