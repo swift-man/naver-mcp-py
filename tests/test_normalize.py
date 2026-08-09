@@ -10,6 +10,7 @@ if str(SRC_DIR) not in sys.path:
 
 from naver_mcp.normalize import (
     normalize_adult_query_response,
+    normalize_datalab_category_trends_response,
     normalize_datalab_device_trends_response,
     normalize_published_at,
     normalize_search_response,
@@ -175,6 +176,63 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual(result["results"][0]["category"], ["50000000"])
         self.assertEqual(result["results"][0]["data"][0]["group"], "mo")
         self.assertEqual(result["meta"]["time_unit"], "date")
+
+    def test_normalize_datalab_keyword_array_preserves_each_keyword(self) -> None:
+        payload = {
+            "startDate": "2026-03-01",
+            "endDate": "2026-03-18",
+            "timeUnit": "date",
+            "results": [
+                {
+                    "title": "정장",
+                    "keyword": ["정장", "수트"],
+                    "data": [{"period": "2026-03-01", "ratio": 100}],
+                }
+            ],
+        }
+
+        result = normalize_datalab_category_trends_response(payload)
+
+        self.assertEqual(result["results"][0]["keywords"], ["정장", "수트"])
+
+    def test_normalize_datalab_does_not_stringify_invalid_metadata(self) -> None:
+        payload = {
+            "startDate": {"unexpected": "start"},
+            "endDate": 20260808,
+            "timeUnit": ["date"],
+            "results": [
+                {
+                    "title": {"unexpected": "title"},
+                    "keywords": {"unexpected": "keyword"},
+                    "category": "50000000",
+                    "data": [],
+                }
+            ]
+        }
+
+        result = normalize_datalab_category_trends_response(payload)
+
+        self.assertEqual(result["results"][0]["title"], "")
+        self.assertNotIn("keywords", result["results"][0])
+        self.assertNotIn("category", result["results"][0])
+        self.assertEqual(result["meta"]["start_date"], "")
+        self.assertEqual(result["meta"]["end_date"], "")
+        self.assertEqual(result["meta"]["time_unit"], "")
+
+    def test_normalize_datalab_handles_ratio_float_overflow(self) -> None:
+        payload = {
+            "results": [
+                {
+                    "title": "파이썬",
+                    "keywords": ["파이썬"],
+                    "data": [{"period": "2026-08-01", "ratio": 10**400}],
+                }
+            ]
+        }
+
+        result = normalize_datalab_category_trends_response(payload)
+
+        self.assertEqual(result["results"][0]["data"][0]["ratio"], 0.0)
 
 
 if __name__ == "__main__":

@@ -4,14 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "naver-mcp-py"
-version = "0.1.0"
-description = "Python MCP server and client library for Naver Search API and DataLab"
+version = "0.2.0.0"
+description = "Python MCP server and client library for NAVER API HUB"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = []
 
 [project.optional-dependencies]
-server = ["fastmcp>=2.0.0"]
+# 보안 수정이 포함된 3.4.6 이상을 사용하고 다음 메이저의 호환성 변경은 차단한다.
+server = ["fastmcp>=3.4.6,<4"]
 dev = ["pytest>=8.0.0", "ruff>=0.4.0"]
 
 [tool.setuptools]
@@ -19,3 +20,10 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff.lint]
+# Ruff 버전이 바뀌어도 공개된 검사 명령의 결과가 달라지지 않도록 핵심 규칙을 고정한다.
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["E402"]

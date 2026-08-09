@@ -11,7 +11,8 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from naver_mcp.cache import TTLCache
-from naver_mcp.errors import ValidationError
+from naver_mcp.config import NaverMCPConfig
+from naver_mcp.errors import NaverServiceUnavailableError, ValidationError
 from naver_mcp.models import (
     BlogSearchRequest,
     BookAdvancedSearchRequest,
@@ -33,9 +34,11 @@ from naver_mcp.tools_search import SearchTools
 class FakeSearchClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
+        self.last_local_display: int | None = None
 
     def search_local(self, request: LocalSearchRequest) -> Mapping[str, Any]:
         self.calls.append(("local", request.query))
+        self.last_local_display = request.display
         return {
             "total": 1,
             "start": request.start,
@@ -339,20 +342,16 @@ class SearchToolsTest(unittest.TestCase):
         self.assertEqual(result["items"][0]["size_height"], "480")
         self.assertEqual(result["items"][0]["size_width"], "640")
 
-    def test_search_book_returns_book_fields(self) -> None:
-        result = self.tools.search_book(query="파이썬 입문")
+    def test_search_book_reports_retired_service(self) -> None:
+        with self.assertRaises(NaverServiceUnavailableError) as context:
+            self.tools.search_book(query="파이썬 입문")
 
-        self.assertEqual(result["source"], "book")
-        self.assertEqual(result["items"][0]["author"], "홍길동")
-        self.assertEqual(result["items"][0]["publisher"], "테스트출판사")
-        self.assertEqual(result["items"][0]["isbn"], "1234567890")
+        self.assertEqual(context.exception.error_code, "NAVER_SERVICE_UNAVAILABLE")
+        self.assertFalse(context.exception.is_retryable)
 
-    def test_search_book_advanced_accepts_title_only(self) -> None:
-        result = self.tools.search_book_advanced(title="클린 코드")
-
-        self.assertEqual(result["source"], "book")
-        self.assertEqual(result["query"], "클린 코드")
-        self.assertEqual(result["items"][0]["title"], "클린 코드")
+    def test_search_book_advanced_reports_retired_service(self) -> None:
+        with self.assertRaises(NaverServiceUnavailableError):
+            self.tools.search_book_advanced(title="클린 코드")
 
     def test_search_encyc_returns_thumbnail(self) -> None:
         result = self.tools.search_encyc(query="블랙홀")
@@ -366,19 +365,13 @@ class SearchToolsTest(unittest.TestCase):
         self.assertEqual(result["source"], "kin")
         self.assertEqual(result["items"][0]["title"], "파이썬 설치 방법")
 
-    def test_search_shop_returns_price_and_mall_fields(self) -> None:
-        result = self.tools.search_shop(query="무선 이어폰", exclude="used:cbshop")
+    def test_search_shop_reports_retired_service(self) -> None:
+        with self.assertRaises(NaverServiceUnavailableError):
+            self.tools.search_shop(query="무선 이어폰")
 
-        self.assertEqual(result["source"], "shop")
-        self.assertEqual(result["items"][0]["low_price"], "99000")
-        self.assertEqual(result["items"][0]["mall_name"], "테스트몰")
-        self.assertEqual(result["items"][0]["brand"], "테스트브랜드")
-
-    def test_search_doc_returns_generic_document_shape(self) -> None:
-        result = self.tools.search_doc(query="생성형 AI")
-
-        self.assertEqual(result["source"], "doc")
-        self.assertEqual(result["items"][0]["title"], "생성형 AI 연구 보고서")
+    def test_search_doc_reports_retired_service(self) -> None:
+        with self.assertRaises(NaverServiceUnavailableError):
+            self.tools.search_doc(query="생성형 AI")
 
     def test_spell_check_uses_longer_cache_and_normalizes_output(self) -> None:
         first = self.tools.spell_check(query="pangyp restaurants")
@@ -394,6 +387,24 @@ class SearchToolsTest(unittest.TestCase):
 
         self.assertTrue(result["is_adult"])
         self.assertFalse(result["meta"]["cached"])
+
+    def test_zero_cache_ttl_disables_auxiliary_tool_cache(self) -> None:
+        client = FakeSearchClient()
+        cache = TTLCache(default_ttl_sec=0)
+        tools = SearchTools(
+            client,
+            cache=cache,
+            config=NaverMCPConfig(cache_ttl_sec=0),
+        )
+
+        tools.spell_check(query="pangyp restaurants")
+        tools.spell_check(query="pangyp restaurants")
+        tools.detect_adult_query(query="adult query")
+        tools.detect_adult_query(query="adult query")
+
+        self.assertEqual(client.calls.count(("spell_check", "pangyp restaurants")), 2)
+        self.assertEqual(client.calls.count(("detect_adult_query", "adult query")), 2)
+        self.assertEqual(cache.size, 0)
 
     def test_search_local_uses_cache_on_repeat_calls(self) -> None:
         first = self.tools.search_local(query="판교 맛집", sort="comment")
@@ -414,8 +425,59 @@ class SearchToolsTest(unittest.TestCase):
         result = self.tools.search_naver_auto(query="파이썬 책", display=5)
 
         self.assertEqual(result["intent"], "book_search")
-        self.assertEqual(result["sources"], ["book"])
-        self.assertEqual(result["items"][0]["source"], "book")
+        self.assertEqual(result["sources"], ["web", "blog"])
+        self.assertEqual(result["items"][0]["source"], "web")
+        self.assertTrue(result["meta"]["fallback"])
+        self.assertEqual(result["meta"]["fallback_reason"], "source_api_retired")
+
+    def test_search_naver_auto_matches_single_character_hints_as_tokens(self) -> None:
+        cases = [
+            ("개인정보 정책", "general_web"),
+            ("정책_자료", "general_web"),
+            ("대책 마련", "general_web"),
+            ("번역 라이브러리", "general_web"),
+            ("기계번역", "general_web"),
+            ("역사 자료", "general_web"),
+            ("수도권 지역", "general_web"),
+            ("독감 방역", "general_web"),
+            ("책 추천", "book_search"),
+            ("역 주변", "place_search"),
+            ("서울역", "place_search"),
+            ("판교역", "place_search"),
+            ("대구역", "place_search"),
+            ("삼성역", "place_search"),
+            ("관악역", "place_search"),
+            ("서울역 맛집", "place_search"),
+        ]
+
+        for query, expected in cases:
+            with self.subTest(query=query):
+                self.assertEqual(self.tools._detect_auto_intent(query), expected)
+
+    def test_search_naver_auto_routes_valid_isbn(self) -> None:
+        result = self.tools.search_naver_auto(query="978-0-13-235088-4", display=5)
+
+        self.assertEqual(result["intent"], "book_search")
+
+    def test_search_naver_auto_does_not_treat_phone_number_as_isbn(self) -> None:
+        phone_numbers = ["010" + "1234" + "5678", "02-1234-5672"]
+
+        for query in phone_numbers:
+            with self.subTest(query=query):
+                result = self.tools.search_naver_auto(query=query, display=5)
+                self.assertEqual(result["intent"], "general_web")
+
+    def test_search_naver_auto_routes_labeled_isbn_10(self) -> None:
+        result = self.tools.search_naver_auto(query="ISBN 0-13-235088-2", display=5)
+
+        self.assertEqual(result["intent"], "book_search")
+
+    def test_search_naver_auto_routes_shopping_queries_to_fallback(self) -> None:
+        result = self.tools.search_naver_auto(query="무선 이어폰 최저가", display=5)
+
+        self.assertEqual(result["intent"], "shopping_search")
+        self.assertEqual(result["sources"], ["web", "blog"])
+        self.assertTrue(result["meta"]["fallback"])
 
     def test_search_naver_auto_deduplicates_community_results(self) -> None:
         result = self.tools.search_naver_auto(query="에어팟 사용기", display=5)
@@ -429,13 +491,32 @@ class SearchToolsTest(unittest.TestCase):
         with self.assertRaises(ValidationError):
             self.tools.search_image(query="고양이", filter="huge")
 
-    def test_search_shop_validates_exclude_options(self) -> None:
+    def test_search_local_validates_api_hub_display_limit(self) -> None:
         with self.assertRaises(ValidationError):
-            self.tools.search_shop(query="이어폰", exclude="used:invalid")
+            self.tools.search_local(query="판교 맛집", display=6)
 
-    def test_search_book_advanced_requires_title_or_isbn(self) -> None:
+    def test_search_local_validates_api_hub_start_limit(self) -> None:
         with self.assertRaises(ValidationError):
-            self.tools.search_book_advanced()
+            self.tools.search_local(query="판교 맛집", start=2)
+
+    def test_search_rejects_non_integer_display_and_start(self) -> None:
+        invalid_calls = [
+            lambda: self.tools.search_blog(query="네이버", display=True),
+            lambda: self.tools.search_blog(query="네이버", display=5.5),
+            lambda: self.tools.search_blog(query="네이버", start=False),
+            lambda: self.tools.search_blog(query="네이버", start=1.5),
+        ]
+
+        for call in invalid_calls:
+            with self.subTest(call=call), self.assertRaises(ValidationError):
+                call()
+
+    def test_search_naver_auto_clamps_local_display(self) -> None:
+        result = self.tools.search_naver_auto(query="판교 맛집", display=10)
+
+        self.assertEqual(result["meta"]["display"], 10)
+        self.assertIn(("local", "판교 맛집"), self.client.calls)
+        self.assertEqual(self.client.last_local_display, 5)
 
     def test_search_web_validates_empty_query(self) -> None:
         with self.assertRaises(ValidationError):

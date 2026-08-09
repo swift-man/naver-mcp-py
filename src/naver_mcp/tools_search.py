@@ -6,6 +6,7 @@ from typing import Any, Callable, Mapping, Optional, Protocol
 
 from .cache import TTLCache
 from .config import NaverMCPConfig
+from .errors import raise_retired_search
 from .models import (
     BlogSearchRequest,
     BookAdvancedSearchRequest,
@@ -122,7 +123,51 @@ class SearchTools:
     )
     BOOK_HINTS = ("책", "도서", "서적", "isbn", "작가", "출판사")
     SHOP_HINTS = ("최저가", "가격", "구매", "할인", "쇼핑", "상품", "판매")
-    ISBN_RE = re.compile(r"(97[89][-\s]?)?\d{9,13}")
+    ISBN_CANDIDATE_RE = re.compile(r"(?<!\w)97[89](?:[-\s]?\d){10}(?!\w)")
+    STATION_NAME_RE = re.compile(r"(?<!\w)([0-9A-Za-z가-힣]{2,20}역)(?!\w)")
+    NON_STATION_WORDS = frozenset(
+        {
+            "번역",
+            "통역",
+            "직역",
+            "의역",
+            "음역",
+            "무역",
+            "교역",
+            "구역",
+            "권역",
+            "광역",
+            "지역",
+            "영역",
+            "수역",
+            "해역",
+            "방역",
+            "검역",
+            "병역",
+            "징역",
+            "현역",
+            "전역",
+            "배역",
+            "대역",
+            "용역",
+            "노역",
+            "성역",
+            "악역",
+            "주역",
+            "단역",
+            "조역",
+            "고역",
+            "중역",
+        }
+    )
+    NON_STATION_SUFFIXES = (
+        "번역",
+        "통역",
+        "직역",
+        "의역",
+        "음역",
+        "무역",
+    )
 
     def __init__(
         self,
@@ -225,8 +270,7 @@ class SearchTools:
         start: int = 1,
         sort: str = "sim",
     ) -> dict[str, Any]:
-        request = BookSearchRequest(query=query, display=display, start=start, sort=sort)
-        return self._run_search("search_book", "book", request, self.client.search_book)
+        raise_retired_search("search_book")
 
     def search_book_advanced(
         self,
@@ -238,20 +282,7 @@ class SearchTools:
         title: str = "",
         isbn: str = "",
     ) -> dict[str, Any]:
-        request = BookAdvancedSearchRequest(
-            query=query,
-            display=display,
-            start=start,
-            sort=sort,
-            title=title,
-            isbn=isbn,
-        )
-        return self._run_search(
-            "search_book_advanced",
-            "book",
-            request,
-            self.client.search_book_advanced,
-        )
+        raise_retired_search("search_book_advanced")
 
     def search_encyc(
         self,
@@ -284,15 +315,7 @@ class SearchTools:
         filter: str = "",
         exclude: str = "",
     ) -> dict[str, Any]:
-        request = ShopSearchRequest(
-            query=query,
-            display=display,
-            start=start,
-            sort=sort,
-            filter=filter,
-            exclude=exclude,
-        )
-        return self._run_search("search_shop", "shop", request, self.client.search_shop)
+        raise_retired_search("search_shop")
 
     def search_doc(
         self,
@@ -301,8 +324,7 @@ class SearchTools:
         display: int = 5,
         start: int = 1,
     ) -> dict[str, Any]:
-        request = DocSearchRequest(query=query, display=display, start=start)
-        return self._run_search("search_doc", "doc", request, self.client.search_doc)
+        raise_retired_search("search_doc")
 
     def spell_check(self, *, query: str) -> dict[str, Any]:
         request = QueryOnlyRequest(query=query)
@@ -341,6 +363,7 @@ class SearchTools:
         source_results = [plan["call"]() for plan in plans]
         unique_items = self._merge_auto_results(source_results)
         total_candidates = sum(len(result.get("items", [])) for result in source_results)
+        uses_retired_source_fallback = intent in {"book_search", "shopping_search"}
 
         normalized = {
             "query": request.query,
@@ -352,9 +375,12 @@ class SearchTools:
                 "returned": len(unique_items[: request.display]),
                 "total_candidates": total_candidates,
                 "deduplicated": max(total_candidates - len(unique_items), 0),
+                "fallback": uses_retired_source_fallback,
                 "cached": False,
             },
         }
+        if uses_retired_source_fallback:
+            normalized["meta"]["fallback_reason"] = "source_api_retired"
         self.cache.set(cache_key, normalized)
         return normalized
 
@@ -398,25 +424,55 @@ class SearchTools:
 
         payload = client_method(request)
         normalized = normalizer(request.query, payload, cached=False)
-        self.cache.set(cache_key, normalized, ttl_sec=self.AUXILIARY_CACHE_TTL_SEC)
+        auxiliary_ttl = (
+            0 if self.config.cache_ttl_sec == 0 else self.AUXILIARY_CACHE_TTL_SEC
+        )
+        self.cache.set(cache_key, normalized, ttl_sec=auxiliary_ttl)
         return normalized
 
     def _detect_auto_intent(self, query: str) -> str:
         # 어떤 규칙에 걸렸는지 추론 가능해야 하므로 단순한 우선순위 규칙으로 intent를 정한다.
         lowered = query.lower()
-        if any(keyword in lowered for keyword in self.NEWS_HINTS):
+        if self._contains_auto_hint(lowered, self.NEWS_HINTS):
             return "news_search"
-        if any(keyword in lowered for keyword in self.BOOK_HINTS) or self.ISBN_RE.search(query):
+        if self._contains_auto_hint(
+            lowered, self.BOOK_HINTS
+        ) or self._contains_valid_isbn(query):
             return "book_search"
-        if any(keyword in lowered for keyword in self.SHOP_HINTS):
+        if self._contains_auto_hint(lowered, self.SHOP_HINTS):
             return "shopping_search"
         if "카페글" in lowered or "네이버카페" in lowered or "cafearticle" in lowered:
             return "community_search"
-        if any(keyword in lowered for keyword in self.PLACE_HINTS):
+        if self._contains_auto_hint(
+            lowered,
+            self.PLACE_HINTS,
+        ) or self._contains_station_name(lowered):
             return "place_search"
-        if any(keyword in lowered for keyword in self.COMMUNITY_HINTS):
+        if self._contains_auto_hint(lowered, self.COMMUNITY_HINTS):
             return "community_search"
         return "general_web"
+
+    @staticmethod
+    def _contains_auto_hint(query: str, hints: tuple[str, ...]) -> bool:
+        for hint in hints:
+            if len(hint) > 1 and hint in query:
+                return True
+            if len(hint) == 1 and re.search(
+                rf"(?<!\w){re.escape(hint)}(?!\w)",
+                query,
+            ):
+                return True
+        return False
+
+    @classmethod
+    def _contains_station_name(cls, query: str) -> bool:
+        for match in cls.STATION_NAME_RE.finditer(query):
+            token = match.group(1)
+            if token not in cls.NON_STATION_WORDS and not token.endswith(
+                cls.NON_STATION_SUFFIXES
+            ):
+                return True
+        return False
 
     def _build_auto_plan(
         self,
@@ -431,7 +487,7 @@ class SearchTools:
                     "source": "local",
                     "call": lambda: self.search_local(
                         query=query,
-                        display=display,
+                        display=min(display, 5),
                         start=1,
                         sort="comment",
                     ),
@@ -461,24 +517,27 @@ class SearchTools:
         if intent == "book_search":
             return [
                 {
-                    "source": "book",
-                    "call": lambda: self.search_book(
+                    "source": "web",
+                    "call": lambda: self.search_web(query=query, display=display, start=1),
+                },
+                {
+                    "source": "blog",
+                    "call": lambda: self.search_blog(
                         query=query,
                         display=display,
                         start=1,
                         sort="sim",
                     ),
-                }
+                },
             ]
         if intent == "shopping_search":
             return [
                 {
-                    "source": "shop",
-                    "call": lambda: self.search_shop(
+                    "source": "web",
+                    "call": lambda: self.search_web(
                         query=query,
                         display=display,
                         start=1,
-                        sort="sim",
                     ),
                 },
                 {
@@ -527,6 +586,19 @@ class SearchTools:
                 ),
             },
         ]
+
+    @classmethod
+    def _contains_valid_isbn(cls, query: str) -> bool:
+        # 라벨 없는 ISBN-10은 10자리 전화번호와 충돌하므로 978/979 ISBN-13만 자동 감지한다.
+        for match in cls.ISBN_CANDIDATE_RE.finditer(query):
+            candidate = re.sub(r"[-\s]", "", match.group(0))
+            checksum = sum(
+                int(value) * (1 if index % 2 == 0 else 3)
+                for index, value in enumerate(candidate[:12])
+            )
+            if (10 - checksum % 10) % 10 == int(candidate[-1]):
+                return True
+        return False
 
     def _merge_auto_results(
         self,

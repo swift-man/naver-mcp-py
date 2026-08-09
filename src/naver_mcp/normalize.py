@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 import html
 import re
+from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Mapping, Optional
@@ -190,7 +190,7 @@ def normalize_spell_check_response(
     *,
     cached: bool = False,
 ) -> dict[str, Any]:
-    corrected = _extract_single_value(payload, "errata")
+    corrected = extract_single_value(payload, "errata")
     corrected_query = strip_html(corrected) or query
     return {
         "query": query,
@@ -206,7 +206,7 @@ def normalize_adult_query_response(
     *,
     cached: bool = False,
 ) -> dict[str, Any]:
-    adult_value = _extract_single_value(payload, "adult")
+    adult_value = extract_single_value(payload, "adult")
     normalized_flag = str(adult_value).strip().lower()
     is_adult = normalized_flag in {"1", "true", "y", "yes"}
     return {
@@ -232,17 +232,17 @@ def normalize_datalab_device_trends_response(
     return _normalize_datalab_response(payload, cached=cached)
 
 
-def _extract_single_value(payload: Mapping[str, Any], field_name: str) -> str:
+def extract_single_value(payload: Mapping[str, Any], field_name: str) -> Optional[Any]:
     # errata/adult 응답은 배포 환경에 따라 필드 중첩 형태가 달라질 수 있어 여러 경로를 순차 탐색한다.
     direct = payload.get(field_name)
     if direct is not None:
-        return str(direct)
+        return direct
 
     result = payload.get("result")
     if isinstance(result, Mapping):
         nested = result.get(field_name)
         if nested is not None:
-            return str(nested)
+            return nested
 
         item = result.get("item")
         extracted = _extract_value_from_item_container(item, field_name)
@@ -257,19 +257,19 @@ def _extract_single_value(payload: Mapping[str, Any], field_name: str) -> str:
     if extracted is not None:
         return extracted
 
-    return ""
+    return None
 
 
-def _extract_value_from_item_container(item: Any, field_name: str) -> Optional[str]:
+def _extract_value_from_item_container(item: Any, field_name: str) -> Optional[Any]:
     if isinstance(item, Mapping):
         value = item.get(field_name)
         if value is not None:
-            return str(value)
+            return value
         return None
     if isinstance(item, Iterable) and not isinstance(item, (str, bytes, bytearray)):
         for candidate in item:
             if isinstance(candidate, Mapping) and candidate.get(field_name) is not None:
-                return str(candidate.get(field_name))
+                return candidate.get(field_name)
     return None
 
 
@@ -291,7 +291,7 @@ def _normalize_datalab_response(
             ratio = point.get("ratio")
             try:
                 ratio_value = float(ratio)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 ratio_value = 0.0
             normalized_point = {
                 "period": str(point.get("period") or ""),
@@ -303,39 +303,45 @@ def _normalize_datalab_response(
                 normalized_point["group"] = str(group)
             data_points.append(normalized_point)
 
+        title = result.get("title")
         normalized_result: dict[str, Any] = {
-            "title": str(result.get("title") or ""),
+            "title": title.strip() if isinstance(title, str) else "",
             "data": data_points,
         }
 
         keywords = result.get("keywords")
-        if isinstance(keywords, Iterable) and not isinstance(
-            keywords, (str, bytes, bytearray)
-        ):
-            normalized_result["keywords"] = [
-                str(keyword) for keyword in keywords if str(keyword).strip()
+        if keywords is None:
+            keywords = result.get("keyword")
+        if isinstance(keywords, list):
+            normalized_keywords = [
+                keyword.strip()
+                for keyword in keywords
+                if isinstance(keyword, str) and keyword.strip()
             ]
-        elif result.get("keyword"):
-            normalized_result["keywords"] = [str(result.get("keyword"))]
+            if normalized_keywords:
+                normalized_result["keywords"] = normalized_keywords
 
         category = result.get("category")
-        if isinstance(category, Iterable) and not isinstance(
-            category, (str, bytes, bytearray)
-        ):
-            normalized_result["category"] = [
-                str(value) for value in category if str(value).strip()
+        if isinstance(category, list):
+            normalized_category = [
+                value.strip()
+                for value in category
+                if isinstance(value, str) and value.strip()
             ]
-        elif category is not None and str(category).strip():
-            normalized_result["category"] = [str(category)]
+            if normalized_category:
+                normalized_result["category"] = normalized_category
 
         results.append(normalized_result)
 
+    start_date = payload.get("startDate")
+    end_date = payload.get("endDate")
+    time_unit = payload.get("timeUnit")
     return {
         "results": results,
         "meta": {
-            "start_date": str(payload.get("startDate") or ""),
-            "end_date": str(payload.get("endDate") or ""),
-            "time_unit": str(payload.get("timeUnit") or ""),
+            "start_date": start_date if isinstance(start_date, str) else "",
+            "end_date": end_date if isinstance(end_date, str) else "",
+            "time_unit": time_unit if isinstance(time_unit, str) else "",
             "cached": cached,
         },
     }

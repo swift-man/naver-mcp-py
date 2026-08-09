@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import http.client
 import json
+import math
 import socket
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
-from typing import Any, Callable, Mapping, Optional
+from datetime import datetime
+from typing import Any, Callable, Mapping, NoReturn, Optional
 
 from .config import NaverMCPConfig
 from .errors import (
@@ -15,6 +17,7 @@ from .errors import (
     NaverAuthError,
     NaverRateLimitError,
     NaverTimeoutError,
+    raise_retired_search,
 )
 from .models import (
     BlogSearchRequest,
@@ -36,11 +39,108 @@ from .models import (
     ShopSearchRequest,
     WebSearchRequest,
 )
+from .normalize import extract_single_value
 
 Transport = Callable[
     [str, str, Mapping[str, str], Optional[bytes], float],
     Mapping[str, Any],
 ]
+
+DATALAB_GROUPED_ENDPOINTS = {
+    "shopping/v1/category/device",
+    "shopping/v1/category/gender",
+    "shopping/v1/category/age",
+    "shopping/v1/category/keyword/device",
+    "shopping/v1/category/keyword/gender",
+    "shopping/v1/category/keyword/age",
+}
+DATALAB_KEYWORD_ENDPOINTS = {
+    "shopping/v1/category/keywords",
+    "shopping/v1/category/keyword/device",
+    "shopping/v1/category/keyword/gender",
+    "shopping/v1/category/keyword/age",
+}
+DATALAB_CATEGORY_ENDPOINTS = {
+    "shopping/v1/categories",
+    "shopping/v1/category/device",
+    "shopping/v1/category/gender",
+    "shopping/v1/category/age",
+}
+DATALAB_SEARCH_TREND_ENDPOINT = "search-trend/v1/search"
+DATALAB_TIME_UNITS = {"date", "week", "month"}
+DATALAB_GROUP_VALUES_BY_ENDPOINT = {
+    "shopping/v1/category/device": {"pc", "mo"},
+    "shopping/v1/category/gender": {"m", "f"},
+    "shopping/v1/category/age": {"10", "20", "30", "40", "50", "60"},
+    "shopping/v1/category/keyword/device": {"pc", "mo"},
+    "shopping/v1/category/keyword/gender": {"m", "f"},
+    "shopping/v1/category/keyword/age": {"10", "20", "30", "40", "50", "60"},
+}
+
+
+def _validate_datalab_response_date(value: object, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise NaverAPIError(f"Naver API returned invalid DataLab {field_name}")
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as exc:
+        raise NaverAPIError(
+            f"Naver API returned invalid DataLab {field_name}"
+        ) from exc
+    if parsed.strftime("%Y-%m-%d") != value:
+        raise NaverAPIError(f"Naver API returned invalid DataLab {field_name}")
+    return value
+
+
+def _url_origin(url: str) -> Optional[tuple[str, str, int]]:
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return None
+    effective_port = port or (443 if parsed.scheme == "https" else 80)
+    return parsed.scheme, parsed.hostname, effective_port
+
+
+class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(
+        self,
+        request: urllib.request.Request,
+        file_pointer: Any,
+        code: int,
+        message: str,
+        headers: Any,
+        new_url: str,
+    ) -> Optional[urllib.request.Request]:
+        source_origin = _url_origin(request.full_url)
+        target_origin = _url_origin(new_url)
+        if (
+            source_origin is None
+            or target_origin is None
+            or source_origin != target_origin
+        ):
+            raise NaverAPIError("Naver API redirect target is not allowed")
+        return super().redirect_request(
+            request,
+            file_pointer,
+            code,
+            message,
+            headers,
+            new_url,
+        )
+
+
+def _safe_urlopen(request: urllib.request.Request, timeout: float) -> Any:
+    # 인증 헤더가 교차 출처 또는 HTTPS→HTTP 리다이렉트로 전달되지 않게 제한한다.
+    opener = urllib.request.build_opener(_SameOriginRedirectHandler())
+    return opener.open(request, timeout=timeout)
 
 
 class NaverClient:
@@ -55,19 +155,19 @@ class NaverClient:
         self.config = config
         self._transport = transport or self._default_transport
         self._sleep_fn = sleep_fn or time.sleep
-        self._max_retries = max(1, max_retries)
+        self._max_retries = max(0, max_retries)
 
     def search_local(self, request: LocalSearchRequest) -> Mapping[str, Any]:
-        return self._request_json("GET", "search/local.json", params=request.to_params())
+        return self._request_json("GET", "search/v1/local", params=request.to_params())
 
     def search_blog(self, request: BlogSearchRequest) -> Mapping[str, Any]:
-        return self._request_json("GET", "search/blog.json", params=request.to_params())
+        return self._request_json("GET", "search/v1/blog", params=request.to_params())
 
     def search_web(self, request: WebSearchRequest) -> Mapping[str, Any]:
-        return self._request_json("GET", "search/webkr.json", params=request.to_params())
+        return self._request_json("GET", "search/v1/webkr", params=request.to_params())
 
     def search_news(self, request: NewsSearchRequest) -> Mapping[str, Any]:
-        return self._request_json("GET", "search/news.json", params=request.to_params())
+        return self._request_json("GET", "search/v1/news", params=request.to_params())
 
     def search_cafearticle(
         self,
@@ -75,49 +175,53 @@ class NaverClient:
     ) -> Mapping[str, Any]:
         return self._request_json(
             "GET",
-            "search/cafearticle.json",
+            "search/v1/cafearticle",
             params=request.to_params(),
         )
 
     def search_image(self, request: ImageSearchRequest) -> Mapping[str, Any]:
-        return self._request_json("GET", "search/image.json", params=request.to_params())
+        return self._request_json("GET", "search/v1/image", params=request.to_params())
 
     def search_book(self, request: BookSearchRequest) -> Mapping[str, Any]:
-        return self._request_json("GET", "search/book.json", params=request.to_params())
+        raise_retired_search("search_book")
 
     def search_book_advanced(
         self,
         request: BookAdvancedSearchRequest,
     ) -> Mapping[str, Any]:
-        return self._request_xml_rss("GET", "search/book_adv.xml", params=request.to_params())
+        raise_retired_search("search_book_advanced")
 
     def search_encyc(self, request: EncycSearchRequest) -> Mapping[str, Any]:
         return self._request_json(
             "GET",
-            "search/encyc.json",
+            "search/v1/encyc",
             params=request.to_params(),
         )
 
     def search_kin(self, request: KinSearchRequest) -> Mapping[str, Any]:
-        return self._request_json("GET", "search/kin.json", params=request.to_params())
+        return self._request_json("GET", "search/v1/kin", params=request.to_params())
 
     def search_shop(self, request: ShopSearchRequest) -> Mapping[str, Any]:
-        return self._request_json("GET", "search/shop.json", params=request.to_params())
+        raise_retired_search("search_shop")
 
     def search_doc(self, request: DocSearchRequest) -> Mapping[str, Any]:
-        return self._request_json("GET", "search/doc.json", params=request.to_params())
+        raise_retired_search("search_doc")
 
     def spell_check(self, request: QueryOnlyRequest) -> Mapping[str, Any]:
-        return self._request_json("GET", "search/errata.json", params=request.to_params())
+        return self._request_json("GET", "search/v1/errata", params=request.to_params())
 
     def detect_adult_query(self, request: QueryOnlyRequest) -> Mapping[str, Any]:
-        return self._request_json("GET", "search/adult.json", params=request.to_params())
+        return self._request_json("GET", "search/v1/adult", params=request.to_params())
 
     def datalab_search_trends(
         self,
         request: DataLabSearchTrendsRequest,
     ) -> Mapping[str, Any]:
-        return self._request_json("POST", "datalab/search", payload=request.to_payload())
+        return self._request_json(
+            "POST",
+            "search-trend/v1/search",
+            payload=request.to_payload(),
+        )
 
     def datalab_shopping_category_trends(
         self,
@@ -125,7 +229,7 @@ class NaverClient:
     ) -> Mapping[str, Any]:
         return self._request_json(
             "POST",
-            "datalab/shopping/categories",
+            "shopping/v1/categories",
             payload=request.to_payload(),
         )
 
@@ -135,7 +239,7 @@ class NaverClient:
     ) -> Mapping[str, Any]:
         return self._request_json(
             "POST",
-            "datalab/shopping/category/device",
+            "shopping/v1/category/device",
             payload=request.to_payload(),
         )
 
@@ -145,7 +249,7 @@ class NaverClient:
     ) -> Mapping[str, Any]:
         return self._request_json(
             "POST",
-            "datalab/shopping/category/gender",
+            "shopping/v1/category/gender",
             payload=request.to_payload(),
         )
 
@@ -155,7 +259,7 @@ class NaverClient:
     ) -> Mapping[str, Any]:
         return self._request_json(
             "POST",
-            "datalab/shopping/category/age",
+            "shopping/v1/category/age",
             payload=request.to_payload(),
         )
 
@@ -165,7 +269,7 @@ class NaverClient:
     ) -> Mapping[str, Any]:
         return self._request_json(
             "POST",
-            "datalab/shopping/category/keywords",
+            "shopping/v1/category/keywords",
             payload=request.to_payload(),
         )
 
@@ -175,7 +279,7 @@ class NaverClient:
     ) -> Mapping[str, Any]:
         return self._request_json(
             "POST",
-            "datalab/shopping/category/keyword/device",
+            "shopping/v1/category/keyword/device",
             payload=request.to_payload(),
         )
 
@@ -185,7 +289,7 @@ class NaverClient:
     ) -> Mapping[str, Any]:
         return self._request_json(
             "POST",
-            "datalab/shopping/category/keyword/gender",
+            "shopping/v1/category/keyword/gender",
             payload=request.to_payload(),
         )
 
@@ -195,7 +299,7 @@ class NaverClient:
     ) -> Mapping[str, Any]:
         return self._request_json(
             "POST",
-            "datalab/shopping/category/keyword/age",
+            "shopping/v1/category/keyword/age",
             payload=request.to_payload(),
         )
 
@@ -214,43 +318,165 @@ class NaverClient:
         if payload is not None:
             headers["Content-Type"] = "application/json"
 
-        for attempt in range(1, self._max_retries + 1):
+        # max_retries는 최초 요청 이후 허용할 추가 시도 횟수다.
+        attempt = 0
+        while True:
             try:
-                return self._transport(
+                response = self._transport(
                     method,
                     url,
                     headers,
                     body,
                     self.config.http_timeout_sec,
                 )
-            except NaverTimeoutError:
-                # timeout만 짧게 재시도하고, 그 외 에러는 바로 상위로 올린다.
-                if attempt >= self._max_retries:
+                return self._validate_response_payload(endpoint, response)
+            except NaverAPIError as exc:
+                # 일시적 5xx만 재시도하고 timeout과 일일 한도 초과는 즉시 반환한다.
+                if not exc.is_retryable or attempt >= self._max_retries:
                     raise
-                self._sleep_fn(min(0.2 * attempt, 1.0))
+                self._sleep_fn(min(0.2 * (attempt + 1), 1.0))
+                attempt += 1
 
-        raise NaverAPIError("Naver API request failed")
-
-    def _request_xml_rss(
-        self,
-        method: str,
+    @staticmethod
+    def _validate_response_payload(
         endpoint: str,
-        *,
-        params: Optional[Mapping[str, object]] = None,
+        payload: Mapping[str, Any],
     ) -> Mapping[str, Any]:
-        # book_adv는 XML만 제공하므로 RSS 형태를 공통 dict로 변환해 상위 계층에 맞춘다.
-        url = self._build_url(endpoint, params=params)
-        headers = self._build_headers()
-        raw_body = self._request_raw(method, url, headers, None)
-        return self._parse_rss_xml(raw_body)
+        if not isinstance(payload, Mapping):
+            raise NaverAPIError("Naver API returned an unexpected payload")
+
+        if endpoint.startswith("search/v1/") and endpoint not in {
+            "search/v1/errata",
+            "search/v1/adult",
+        }:
+            if "items" not in payload:
+                raise NaverAPIError("Naver API response is missing search items")
+            items = payload["items"]
+            if not isinstance(items, list):
+                raise NaverAPIError("Naver API returned invalid search items")
+            if any(not isinstance(item, Mapping) for item in items):
+                raise NaverAPIError("Naver API returned invalid search item")
+            for field_name in ("total", "start", "display"):
+                value = payload.get(field_name)
+                if value is None:
+                    continue
+                if isinstance(value, bool) or not isinstance(value, (int, str)):
+                    raise NaverAPIError(
+                        f"Naver API returned invalid search {field_name}"
+                    )
+                try:
+                    int(value)
+                except ValueError as exc:
+                    raise NaverAPIError(
+                        f"Naver API returned invalid search {field_name}"
+                    ) from exc
+
+        if endpoint == "search/v1/adult":
+            adult = extract_single_value(payload, "adult")
+            if not isinstance(adult, str) or adult.strip() not in {"0", "1"}:
+                raise NaverAPIError("Naver API returned invalid adult query result")
+
+        if endpoint == "search/v1/errata":
+            errata = extract_single_value(payload, "errata")
+            if not isinstance(errata, str):
+                raise NaverAPIError("Naver API returned invalid errata result")
+
+        if endpoint.startswith(("search-trend/v1/", "shopping/v1/")):
+            if "results" not in payload:
+                raise NaverAPIError("Naver API response is missing DataLab results")
+            results = payload["results"]
+            if not isinstance(results, list):
+                raise NaverAPIError("Naver API returned invalid DataLab results")
+
+            start_date = _validate_datalab_response_date(
+                payload.get("startDate"),
+                "startDate",
+            )
+            end_date = _validate_datalab_response_date(
+                payload.get("endDate"),
+                "endDate",
+            )
+            if start_date > end_date:
+                raise NaverAPIError("Naver API returned invalid DataLab date range")
+            time_unit = payload.get("timeUnit")
+            if not isinstance(time_unit, str) or time_unit not in DATALAB_TIME_UNITS:
+                raise NaverAPIError("Naver API returned invalid DataLab timeUnit")
+
+            for result in results:
+                if not isinstance(result, Mapping):
+                    raise NaverAPIError("Naver API returned invalid DataLab result")
+                title = result.get("title")
+                if not isinstance(title, str) or not title.strip():
+                    raise NaverAPIError("Naver API returned invalid DataLab title")
+
+                required_metadata = None
+                if endpoint == DATALAB_SEARCH_TREND_ENDPOINT:
+                    required_metadata = "keywords"
+                elif endpoint in DATALAB_CATEGORY_ENDPOINTS:
+                    required_metadata = "category"
+                elif endpoint in DATALAB_KEYWORD_ENDPOINTS:
+                    required_metadata = "keyword"
+
+                # 공식 응답 배열은 필수 필드뿐 아니라 선택적으로 포함된 경우도 검증한다.
+                for field_name in ("keywords", "keyword", "category"):
+                    if field_name not in result:
+                        if field_name == required_metadata:
+                            raise NaverAPIError(
+                                f"Naver API response is missing DataLab {field_name}"
+                            )
+                        continue
+                    values = result[field_name]
+                    if (
+                        not isinstance(values, list)
+                        or not values
+                        or any(
+                            not isinstance(value, str) or not value.strip()
+                            for value in values
+                        )
+                    ):
+                        raise NaverAPIError(
+                            f"Naver API returned invalid DataLab {field_name}"
+                        )
+                if "data" not in result:
+                    raise NaverAPIError("Naver API response is missing DataLab data")
+                data = result["data"]
+                if not isinstance(data, list):
+                    raise NaverAPIError("Naver API returned invalid DataLab data")
+                for point in data:
+                    if not isinstance(point, Mapping):
+                        raise NaverAPIError("Naver API returned invalid DataLab data point")
+                    _validate_datalab_response_date(
+                        point.get("period"),
+                        "period",
+                    )
+                    if endpoint in DATALAB_GROUPED_ENDPOINTS:
+                        allowed_groups = DATALAB_GROUP_VALUES_BY_ENDPOINT[endpoint]
+                        group = point.get("group")
+                        if not isinstance(group, str) or group not in allowed_groups:
+                            raise NaverAPIError("Naver API returned invalid DataLab group")
+                    elif "group" in point:
+                        raise NaverAPIError("Naver API returned unexpected DataLab group")
+                    ratio = point.get("ratio")
+                    if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
+                        raise NaverAPIError("Naver API returned invalid DataLab ratio")
+                    try:
+                        normalized_ratio = float(ratio)
+                    except (OverflowError, ValueError):
+                        normalized_ratio = math.nan
+                    if not math.isfinite(normalized_ratio) or not (
+                        0 <= normalized_ratio <= 100
+                    ):
+                        raise NaverAPIError("Naver API returned invalid DataLab ratio")
+
+        return payload
 
     def _build_headers(self) -> dict[str, str]:
         # 인증값이 없으면 여기서 즉시 실패시켜, 네트워크 호출 전에 문제를 드러낸다.
         self.config.require_credentials()
         return {
             "Accept": "application/json",
-            "X-Naver-Client-Id": self.config.client_id,
-            "X-Naver-Client-Secret": self.config.client_secret,
+            "X-NCP-APIGW-API-KEY-ID": self.config.client_id,
+            "X-NCP-APIGW-API-KEY": self.config.client_secret,
         }
 
     def _build_url(
@@ -265,34 +491,6 @@ class NaverClient:
             return url
         query_string = urllib.parse.urlencode(params)
         return f"{url}?{query_string}"
-
-    def _request_raw(
-        self,
-        method: str,
-        url: str,
-        headers: Mapping[str, str],
-        body: Optional[bytes],
-    ) -> str:
-        request = urllib.request.Request(
-            url=url,
-            headers=dict(headers),
-            data=body,
-            method=method,
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=self.config.http_timeout_sec) as response:
-                return response.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            raw_body = exc.read().decode("utf-8", errors="replace")
-            self._raise_for_http_error(exc.code, raw_body)
-        except urllib.error.URLError as exc:
-            if isinstance(exc.reason, socket.timeout) or "timed out" in str(exc.reason).lower():
-                raise NaverTimeoutError("Naver API request timed out") from exc
-            raise NaverAPIError("Naver API request failed", retryable=True) from exc
-        except TimeoutError as exc:
-            raise NaverTimeoutError("Naver API request timed out") from exc
-
-        raise NaverAPIError("Naver API request failed")
 
     def _default_transport(
         self,
@@ -310,15 +508,18 @@ class NaverClient:
             method=method,
         )
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                raw_body = response.read().decode("utf-8")
+            with _safe_urlopen(request, timeout) as response:
+                raw_body = self._read_response_body(response)
         except urllib.error.HTTPError as exc:
-            raw_body = exc.read().decode("utf-8", errors="replace")
+            raw_body = self._read_http_error_body(exc)
             self._raise_for_http_error(exc.code, raw_body)
         except urllib.error.URLError as exc:
             if isinstance(exc.reason, socket.timeout) or "timed out" in str(exc.reason).lower():
                 raise NaverTimeoutError("Naver API request timed out") from exc
             raise NaverAPIError("Naver API request failed", retryable=True) from exc
+        except http.client.HTTPException as exc:
+            # 응답 본문 수신 중 연결이 끊긴 경우에도 상위 계층이 재시도할 수 있게 변환한다.
+            raise NaverAPIError("Naver API response was interrupted", retryable=True) from exc
         except TimeoutError as exc:
             raise NaverTimeoutError("Naver API request timed out") from exc
 
@@ -330,44 +531,72 @@ class NaverClient:
             raise NaverAPIError("Naver API returned an unexpected payload")
         return parsed
 
-    def _parse_rss_xml(self, raw_body: str) -> Mapping[str, Any]:
-        try:
-            root = ET.fromstring(raw_body)
-        except ET.ParseError as exc:
-            raise NaverAPIError("Naver API returned invalid XML") from exc
-
-        channel = root.find("channel")
-        if channel is None:
-            raise NaverAPIError("Naver API returned an unexpected XML payload")
-
-        items: list[dict[str, str]] = []
-        for item_element in channel.findall("item"):
-            item: dict[str, str] = {}
-            for child in list(item_element):
-                item[child.tag] = child.text or ""
-            items.append(item)
-
-        return {
-            "total": self._safe_int(channel.findtext("total"), len(items)),
-            "start": self._safe_int(channel.findtext("start"), 1),
-            "display": self._safe_int(channel.findtext("display"), len(items)),
-            "items": items,
-        }
-
     @staticmethod
-    def _safe_int(value: Optional[str], default: int) -> int:
+    def _read_response_body(response: Any) -> str:
         try:
-            return int(value or default)
-        except (TypeError, ValueError):
-            return default
+            return response.read().decode("utf-8", errors="replace")
+        except urllib.error.URLError as exc:
+            if isinstance(exc.reason, socket.timeout) or "timed out" in str(
+                exc.reason
+            ).lower():
+                raise NaverTimeoutError("Naver API response timed out") from exc
+            raise NaverAPIError(
+                "Naver API response was interrupted",
+                retryable=True,
+            ) from exc
+        except TimeoutError as exc:
+            raise NaverTimeoutError("Naver API response timed out") from exc
+        except (http.client.HTTPException, OSError) as exc:
+            # 본문 수신 중 연결이 끊겨도 원시 네트워크 예외가 도구 경계를 넘지 않게 한다.
+            raise NaverAPIError(
+                "Naver API response was interrupted",
+                retryable=True,
+            ) from exc
 
-    def _raise_for_http_error(self, status_code: int, body: str) -> None:
+    def _read_http_error_body(self, error: urllib.error.HTTPError) -> str:
+        try:
+            return self._read_response_body(error)
+        except NaverTimeoutError as exc:
+            if error.code >= 500:
+                raise NaverTimeoutError(
+                    "Naver API error response timed out",
+                    status_code=error.code,
+                ) from exc
+            self._raise_for_http_error(error.code, "")
+        except NaverAPIError:
+            # 본문이 손상되어도 이미 받은 인증·한도·서버 상태 분류를 우선한다.
+            self._raise_for_http_error(error.code, "")
+
+    def _raise_for_http_error(self, status_code: int, body: str) -> NoReturn:
         # 상위 계층이 안정적으로 처리할 수 있도록 HTTP 상태를 내부 에러 코드로 매핑한다.
-        message = body.strip() or f"Naver API request failed with status {status_code}"
+        message = self._extract_error_message(body, status_code)
         if status_code in {401, 403}:
             raise NaverAuthError(message, status_code=status_code)
         if status_code == 429:
             raise NaverRateLimitError(message, status_code=status_code)
-        if status_code == 408 or status_code >= 500:
+        if status_code == 408:
             raise NaverTimeoutError(message, status_code=status_code)
+        if status_code >= 500:
+            raise NaverAPIError(message, status_code=status_code, retryable=True)
         raise NaverAPIError(message, status_code=status_code)
+
+    @staticmethod
+    def _extract_error_message(body: str, status_code: int) -> str:
+        fallback = body.strip() or f"Naver API request failed with status {status_code}"
+        try:
+            payload = json.loads(body)
+        except (TypeError, json.JSONDecodeError):
+            return fallback
+        if not isinstance(payload, Mapping):
+            return fallback
+
+        gateway_error = payload.get("error")
+        if isinstance(gateway_error, Mapping):
+            message = gateway_error.get("message") or gateway_error.get("details")
+            if message:
+                return str(message)
+
+        message = payload.get("errorMessage") or payload.get("errMsg")
+        if message:
+            return str(message)
+        return fallback

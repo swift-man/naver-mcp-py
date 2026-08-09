@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Mapping, Optional, Protocol
+from collections.abc import Mapping
+from typing import Any, Callable, Optional, Protocol
 
 from .cache import TTLCache
 from .config import NaverMCPConfig
+from .errors import ValidationError
 from .models import (
     DataLabCategoryGroup,
-    DataLabSearchTrendsRequest,
     DataLabKeywordGroup,
+    DataLabSearchTrendsRequest,
     DataLabShoppingCategoryDetailRequest,
     DataLabShoppingCategoryTrendsRequest,
     DataLabShoppingKeywordDetailRequest,
@@ -20,6 +22,54 @@ from .normalize import (
     normalize_datalab_device_trends_response,
     normalize_datalab_search_trends_response_with_meta,
 )
+
+
+def _require_group_mapping(value: object, field_name: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValidationError(f"{field_name} entries must be objects")
+    return value
+
+
+def _require_group_list(values: object, field_name: str) -> list[object]:
+    if not isinstance(values, list):
+        raise ValidationError(f"{field_name} must be a list")
+    return values
+
+
+def _read_group_text(
+    group: Mapping[str, Any],
+    field_name: str,
+    alias: Optional[str] = None,
+) -> str:
+    if field_name in group:
+        value = group[field_name]
+    elif alias:
+        value = group.get(alias)
+    else:
+        value = None
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ValidationError(f"{field_name} must be a string")
+    return value
+
+
+def _read_group_list(
+    group: Mapping[str, Any],
+    field_name: str,
+    alias: Optional[str] = None,
+) -> list[object]:
+    if field_name in group:
+        value = group[field_name]
+    elif alias:
+        value = group.get(alias)
+    else:
+        value = None
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValidationError(f"{field_name} must be a list")
+    return value
 
 
 class DataLabClientProtocol(Protocol):
@@ -97,20 +147,28 @@ class DataLabTools:
         end_date: str,
         time_unit: str,
         keyword_groups: list[dict[str, Any]],
+        device: str = "",
+        gender: str = "",
+        ages: Optional[list[str]] = None,
     ) -> dict[str, Any]:
         # 외부 입력은 dict로 받고, 내부에서는 검증 가능한 요청 모델로 즉시 변환한다.
-        groups = [
-            DataLabKeywordGroup(
-                group_name=str(group.get("group_name") or group.get("groupName") or ""),
-                keywords=list(group.get("keywords") or []),
+        groups: list[DataLabKeywordGroup] = []
+        for value in _require_group_list(keyword_groups, "keyword_groups"):
+            group = _require_group_mapping(value, "keyword_groups")
+            groups.append(
+                DataLabKeywordGroup(
+                    group_name=_read_group_text(group, "group_name", "groupName"),
+                    keywords=_read_group_list(group, "keywords"),
+                )
             )
-            for group in keyword_groups
-        ]
         request = DataLabSearchTrendsRequest(
             start_date=start_date,
             end_date=end_date,
             time_unit=time_unit,
             keyword_groups=groups,
+            device=device,
+            gender=gender,
+            ages=[] if ages is None else ages,
         )
         return self._run_datalab_tool(
             "datalab_search_trends",
@@ -376,13 +434,15 @@ class DataLabTools:
         gender: str,
         ages: Optional[list[str]],
     ) -> DataLabShoppingCategoryTrendsRequest:
-        category_groups = [
-            DataLabCategoryGroup(
-                name=str(group.get("name") or ""),
-                params=list(group.get("params") or group.get("param") or []),
+        category_groups: list[DataLabCategoryGroup] = []
+        for value in _require_group_list(categories, "categories"):
+            group = _require_group_mapping(value, "categories")
+            category_groups.append(
+                DataLabCategoryGroup(
+                    name=_read_group_text(group, "name"),
+                    params=_read_group_list(group, "params", "param"),
+                )
             )
-            for group in categories
-        ]
         return DataLabShoppingCategoryTrendsRequest(
             start_date=start_date,
             end_date=end_date,
@@ -390,7 +450,7 @@ class DataLabTools:
             categories=category_groups,
             device=device,
             gender=gender,
-            ages=list(ages or []),
+            ages=[] if ages is None else ages,
         )
 
     def _build_category_detail_request(
@@ -411,7 +471,7 @@ class DataLabTools:
             category=category,
             device=device,
             gender=gender,
-            ages=list(ages or []),
+            ages=[] if ages is None else ages,
         )
 
     def _build_keyword_trends_request(
@@ -427,13 +487,15 @@ class DataLabTools:
         ages: Optional[list[str]],
     ) -> DataLabShoppingKeywordTrendsRequest:
         # category/param 이름 차이를 여기서 흡수해 MCP 입력 형태를 단순하게 유지한다.
-        keyword_groups = [
-            DataLabShoppingKeywordGroup(
-                name=str(group.get("name") or ""),
-                params=list(group.get("params") or group.get("param") or []),
+        keyword_groups: list[DataLabShoppingKeywordGroup] = []
+        for value in _require_group_list(keywords, "keywords"):
+            group = _require_group_mapping(value, "keywords")
+            keyword_groups.append(
+                DataLabShoppingKeywordGroup(
+                    name=_read_group_text(group, "name"),
+                    params=_read_group_list(group, "params", "param"),
+                )
             )
-            for group in keywords
-        ]
         return DataLabShoppingKeywordTrendsRequest(
             start_date=start_date,
             end_date=end_date,
@@ -442,7 +504,7 @@ class DataLabTools:
             keywords=keyword_groups,
             device=device,
             gender=gender,
-            ages=list(ages or []),
+            ages=[] if ages is None else ages,
         )
 
     def _build_keyword_detail_request(
@@ -465,7 +527,7 @@ class DataLabTools:
             keyword=keyword,
             device=device,
             gender=gender,
-            ages=list(ages or []),
+            ages=[] if ages is None else ages,
         )
 
     def _run_datalab_tool(

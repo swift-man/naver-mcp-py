@@ -2,7 +2,7 @@
 
 ## Overview
 
-`naver-mcp-py` is a dedicated Python repository that exposes Naver Search API and DataLab as MCP tools.
+`naver-mcp-py` is a dedicated Python repository that exposes NAVER API HUB Search, Search Trend, and Shopping Insight APIs as MCP tools.
 
 The repository supports two modes:
 
@@ -29,8 +29,10 @@ flowchart LR
     A["Chat App"] --> B["App Router or Orchestrator"]
     B --> C["naver-mcp-py"]
     B --> D["other MCP servers"]
-    C --> E["Naver Search API"]
-    C --> F["Naver DataLab API"]
+    C --> E["NAVER API HUB"]
+    E --> F["Search"]
+    E --> G["Search Trend"]
+    E --> H["Shopping Insight"]
 ```
 
 ## Repository Responsibilities
@@ -64,8 +66,11 @@ server.py
 Holds environment parsing and defaults:
 
 - API credentials
+- validated upstream API base URL with HTTPS required outside loopback
 - host and port
 - MCP transport configuration
+- remote-access protection mode
+- JWT verifier configuration for authenticated remote access
 - timeout and cache settings
 
 ### `client.py`
@@ -74,7 +79,8 @@ Owns raw HTTP calls to Naver APIs.
 
 Responsibilities:
 
-- build request headers
+- build `X-NCP-APIGW-API-KEY-ID` and `X-NCP-APIGW-API-KEY` headers
+- map tool calls to `/search/v1`, `/search-trend/v1`, and `/shopping/v1` endpoints
 - send HTTP requests
 - handle status codes
 - map transport failures into structured exceptions
@@ -102,9 +108,21 @@ Implemented tools:
 - `search_web`
 - `search_news`
 - `search_cafearticle`
+- `search_image`
+- `search_encyc`
+- `search_kin`
 - `spell_check`
 - `detect_adult_query`
 - `search_naver_auto`
+
+Compatibility-only retired tools:
+
+- `search_book`
+- `search_book_advanced`
+- `search_shop`
+- `search_doc`
+
+The retired tools raise `NAVER_SERVICE_UNAVAILABLE` without a network request because Naver ended the underlying APIs on 2026-07-31.
 
 ### `tools_datalab.py`
 
@@ -114,6 +132,13 @@ Implemented tools:
 
 - `datalab_search_trends`
 - `datalab_shopping_category_trends`
+- `datalab_shopping_category_device_trends`
+- `datalab_shopping_category_gender_trends`
+- `datalab_shopping_category_age_trends`
+- `datalab_shopping_keyword_trends`
+- `datalab_shopping_keyword_device_trends`
+- `datalab_shopping_keyword_gender_trends`
+- `datalab_shopping_keyword_age_trends`
 - `datalab_shopping_device_trends`
 
 ### `server.py`
@@ -122,6 +147,7 @@ Defines:
 
 - FastMCP server object
 - MCP tool registration
+- a common boundary that converts `NaverMCPError` exceptions into structured tool responses
 - main process entry point
 - a lightweight `healthz()` helper for embedding scenarios
 
@@ -156,7 +182,7 @@ All search tools try to emit:
   "title": "normalized title",
   "link": "https://...",
   "snippet": "normalized description",
-  "source": "local|blog|web|news|cafearticle",
+  "source": "local|blog|web|news|cafearticle|image|encyc|kin",
   "published_at": "2026-03-18T12:00:00+09:00",
   "score": 0.0
 }
@@ -174,12 +200,21 @@ Source-specific fields are added without breaking the common shape.
 
 Composite tools are helpers. Low-level tools remain first-class.
 
+Book and shopping intents use `web` and `blog` fallback sources because the dedicated upstream APIs no longer exist. The response includes `meta.fallback` and `meta.fallback_reason` so clients can distinguish fallback results.
+
 ## Reliability Policy
 
-- Search tools should fail fast on timeout.
+- Socket timeouts should fail fast without an immediate retry.
+- Temporary 5xx responses may be retried once by default.
+- Daily quota errors should not be retried automatically.
 - Errors should include a stable error code and retryable flag.
-- Cache should be conservative and time-bounded.
+- Cache should be conservative, time-bounded, and limited to 1,024 entries with LRU eviction.
 - Credential errors should surface clearly.
+- Upstream API responses should be type- and range-checked before normalization and caching.
+- DataLab response dates, time units, and breakdown group codes should be checked against the endpoint contract before caching.
+- Upstream redirects must preserve scheme, host, and effective port before authentication headers are forwarded.
+- HTTP servers should bind to loopback by default.
+- Non-loopback binding requires FastMCP authentication or an operator-confirmed firewall/VPN allowlist.
 
 ## Cache Guidance
 
@@ -188,6 +223,13 @@ Recommended defaults:
 - search: 5 minutes
 - spell/adult detection: 30 minutes
 - DataLab trends: 30 minutes or longer
+
+Setting `NAVER_CACHE_TTL_SEC=0` disables all Search API tool caching, including
+spell and adult-query results. DataLab keeps its documented 30-minute minimum.
+The accepted cache TTL range is 0 through 31,536,000 seconds (365 days).
+
+Expired entries are pruned during writes, and the least recently used entry is
+evicted when the in-memory cache reaches its 1,024-entry limit.
 
 ## Integration Guidance
 
@@ -213,4 +255,3 @@ Examples:
 - answers requiring internal data plus public search data
 
 This repository should support both patterns cleanly.
-
