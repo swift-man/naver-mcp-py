@@ -6,6 +6,7 @@ import unittest
 import urllib.parse
 from pathlib import Path
 from typing import Any, Mapping, Optional
+from unittest import mock
 
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 if str(SRC_DIR) not in sys.path:
@@ -19,6 +20,7 @@ from naver_mcp.errors import (
     NaverRateLimitError,
     NaverServiceUnavailableError,
     NaverTimeoutError,
+    ValidationError,
 )
 from naver_mcp.models import (
     BlogSearchRequest,
@@ -96,6 +98,24 @@ class NaverClientTest(unittest.TestCase):
 
         self.assertEqual(config.client_id, "legacy-id")
         self.assertEqual(config.client_secret, "legacy-secret")
+
+    def test_config_does_not_mix_api_hub_and_legacy_credentials(self) -> None:
+        cases = [
+            {
+                "NAVER_API_HUB_CLIENT_ID": "hub-id",
+                "NAVER_CLIENT_SECRET": "legacy-secret",
+            },
+            {
+                "NAVER_API_HUB_CLIENT_SECRET": "hub-secret",
+                "NAVER_CLIENT_ID": "legacy-id",
+            },
+        ]
+
+        for env in cases:
+            with self.subTest(env=env):
+                config = NaverMCPConfig.from_env(env)
+                with self.assertRaises(ValidationError):
+                    config.require_credentials()
 
     def test_config_accepts_api_base_url_override(self) -> None:
         config = NaverMCPConfig.from_env(
@@ -320,6 +340,52 @@ class NaverClientTest(unittest.TestCase):
 
         self.assertEqual(calls, 2)
         self.assertEqual(sleeps, [0.2])
+
+    def test_malformed_success_payload_is_rejected(self) -> None:
+        payloads = [
+            {"items": None},
+            {"items": [], "total": "not-a-number"},
+        ]
+
+        for payload in payloads:
+            with self.subTest(payload=payload):
+                client = NaverClient(
+                    self.config,
+                    transport=lambda *args, payload=payload: payload,
+                )
+                with self.assertRaises(NaverAPIError):
+                    client.search_blog(BlogSearchRequest(query="네이버"))
+
+    def test_malformed_datalab_success_payload_is_rejected(self) -> None:
+        request = DataLabSearchTrendsRequest(
+            start_date="2026-08-01",
+            end_date="2026-08-08",
+            time_unit="date",
+            keyword_groups=[DataLabKeywordGroup(group_name="파이썬", keywords=["파이썬"])],
+        )
+        client = NaverClient(
+            self.config,
+            transport=lambda *args: {"results": [{"data": None}]},
+        )
+
+        with self.assertRaises(NaverAPIError):
+            client.datalab_search_trends(request)
+
+    def test_default_transport_replaces_invalid_utf8_bytes(self) -> None:
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = b'{"note":"\xff"}'
+
+        with mock.patch("naver_mcp.client.urllib.request.urlopen", return_value=response):
+            payload = self.client._default_transport(
+                "GET",
+                "https://api.example.com/test",
+                {},
+                None,
+                1.0,
+            )
+
+        self.assertEqual(payload["note"], "\ufffd")
 
     def test_timeout_fails_fast_without_retry(self) -> None:
         calls = 0

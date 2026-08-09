@@ -443,8 +443,8 @@ class DataLabToolsTest(unittest.TestCase):
                 call()
 
     def test_datalab_canonical_group_field_is_not_overridden_by_alias(self) -> None:
-        with self.assertRaises(ValidationError):
-            self.tools.datalab_search_trends(
+        invalid_calls = [
+            lambda: self.tools.datalab_search_trends(
                 start_date="2026-03-01",
                 end_date="2026-03-18",
                 time_unit="date",
@@ -455,7 +455,36 @@ class DataLabToolsTest(unittest.TestCase):
                         "keywords": ["파이썬"],
                     }
                 ],
-            )
+            ),
+            lambda: self.tools.datalab_search_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                keyword_groups=[
+                    {
+                        "group_name": None,
+                        "groupName": "alias-name",
+                        "keywords": ["파이썬"],
+                    }
+                ],
+            ),
+            lambda: self.tools.datalab_shopping_category_trends(
+                start_date="2026-03-01",
+                end_date="2026-03-18",
+                time_unit="date",
+                categories=[
+                    {
+                        "name": "패션의류",
+                        "params": None,
+                        "param": ["50000000"],
+                    }
+                ],
+            ),
+        ]
+
+        for call in invalid_calls:
+            with self.subTest(call=call), self.assertRaises(ValidationError):
+                call()
 
     def test_datalab_shopping_rejects_scalar_nested_params(self) -> None:
         invalid_calls = [

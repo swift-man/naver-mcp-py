@@ -221,20 +221,62 @@ class NaverClient:
         # max_retries는 최초 요청 이후 허용할 추가 시도 횟수다.
         for attempt in range(self._max_retries + 1):
             try:
-                return self._transport(
+                response = self._transport(
                     method,
                     url,
                     headers,
                     body,
                     self.config.http_timeout_sec,
                 )
+                return self._validate_response_payload(endpoint, response)
             except NaverAPIError as exc:
                 # 일시적 5xx만 재시도하고 timeout과 일일 한도 초과는 즉시 반환한다.
                 if not exc.is_retryable or attempt >= self._max_retries:
                     raise
                 self._sleep_fn(min(0.2 * (attempt + 1), 1.0))
 
-        raise NaverAPIError("Naver API request failed")
+    @staticmethod
+    def _validate_response_payload(
+        endpoint: str,
+        payload: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        if not isinstance(payload, Mapping):
+            raise NaverAPIError("Naver API returned an unexpected payload")
+
+        if endpoint.startswith("search/v1/") and endpoint not in {
+            "search/v1/errata",
+            "search/v1/adult",
+        }:
+            items = payload.get("items", [])
+            if not isinstance(items, list):
+                raise NaverAPIError("Naver API returned invalid search items")
+            for field_name in ("total", "start", "display"):
+                value = payload.get(field_name)
+                if value is None:
+                    continue
+                if isinstance(value, bool) or not isinstance(value, (int, str)):
+                    raise NaverAPIError(
+                        f"Naver API returned invalid search {field_name}"
+                    )
+                try:
+                    int(value)
+                except ValueError as exc:
+                    raise NaverAPIError(
+                        f"Naver API returned invalid search {field_name}"
+                    ) from exc
+
+        if endpoint.startswith(("search-trend/v1/", "shopping/v1/")):
+            results = payload.get("results", [])
+            if not isinstance(results, list):
+                raise NaverAPIError("Naver API returned invalid DataLab results")
+            for result in results:
+                if not isinstance(result, Mapping):
+                    continue
+                data = result.get("data", [])
+                if not isinstance(data, list):
+                    raise NaverAPIError("Naver API returned invalid DataLab data")
+
+        return payload
 
     def _build_headers(self) -> dict[str, str]:
         # 인증값이 없으면 여기서 즉시 실패시켜, 네트워크 호출 전에 문제를 드러낸다.
@@ -275,7 +317,7 @@ class NaverClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                raw_body = response.read().decode("utf-8")
+                raw_body = response.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as exc:
             raw_body = exc.read().decode("utf-8", errors="replace")
             self._raise_for_http_error(exc.code, raw_body)

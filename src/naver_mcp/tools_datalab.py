@@ -41,9 +41,12 @@ def _read_group_text(
     field_name: str,
     alias: Optional[str] = None,
 ) -> str:
-    value = group.get(field_name)
-    if value is None and alias:
+    if field_name in group:
+        value = group[field_name]
+    elif alias:
         value = group.get(alias)
+    else:
+        value = None
     if value is None:
         return ""
     if not isinstance(value, str):
@@ -56,9 +59,12 @@ def _read_group_list(
     field_name: str,
     alias: Optional[str] = None,
 ) -> object:
-    value = group.get(field_name)
-    if value is None and alias:
+    if field_name in group:
+        value = group[field_name]
+    elif alias:
         value = group.get(alias)
+    else:
+        value = None
     return [] if value is None else value
 
 

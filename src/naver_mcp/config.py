@@ -13,12 +13,18 @@ def _read_str(env: Mapping[str, str], key: str, default: str = "") -> str:
     return env.get(key, default).strip()
 
 
-def _read_first(env: Mapping[str, str], *keys: str) -> str:
-    for key in keys:
-        value = _read_str(env, key)
-        if value:
-            return value
-    return ""
+def _read_credentials(env: Mapping[str, str]) -> tuple[str, str]:
+    hub_credentials = (
+        _read_str(env, "NAVER_API_HUB_CLIENT_ID"),
+        _read_str(env, "NAVER_API_HUB_CLIENT_SECRET"),
+    )
+    # 신규 자격 증명이 일부라도 설정되면 레거시 값과 섞지 않고 신규 쌍만 사용한다.
+    if any(hub_credentials):
+        return hub_credentials
+    return (
+        _read_str(env, "NAVER_CLIENT_ID"),
+        _read_str(env, "NAVER_CLIENT_SECRET"),
+    )
 
 
 def _read_int(env: Mapping[str, str], key: str, default: int) -> int:
@@ -59,17 +65,10 @@ class NaverMCPConfig:
         env: Optional[Mapping[str, str]] = None,
     ) -> "NaverMCPConfig":
         source = os.environ if env is None else env
+        client_id, client_secret = _read_credentials(source)
         return cls(
-            client_id=_read_first(
-                source,
-                "NAVER_API_HUB_CLIENT_ID",
-                "NAVER_CLIENT_ID",
-            ),
-            client_secret=_read_first(
-                source,
-                "NAVER_API_HUB_CLIENT_SECRET",
-                "NAVER_CLIENT_SECRET",
-            ),
+            client_id=client_id,
+            client_secret=client_secret,
             host=_read_str(source, "NAVER_MCP_HOST", "127.0.0.1"),
             port=_read_int(source, "NAVER_MCP_PORT", 8100),
             path=_read_str(source, "NAVER_MCP_PATH", "/mcp") or "/mcp",
