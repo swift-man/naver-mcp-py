@@ -448,6 +448,18 @@ class SearchToolsTest(unittest.TestCase):
         with self.assertRaises(ValidationError):
             self.tools.search_local(query="판교 맛집", start=2)
 
+    def test_search_rejects_non_integer_display_and_start(self) -> None:
+        invalid_calls = [
+            lambda: self.tools.search_blog(query="네이버", display=True),
+            lambda: self.tools.search_blog(query="네이버", display=5.5),
+            lambda: self.tools.search_blog(query="네이버", start=False),
+            lambda: self.tools.search_blog(query="네이버", start=1.5),
+        ]
+
+        for call in invalid_calls:
+            with self.subTest(call=call), self.assertRaises(ValidationError):
+                call()
+
     def test_search_naver_auto_clamps_local_display(self) -> None:
         result = self.tools.search_naver_auto(query="판교 맛집", display=10)
 

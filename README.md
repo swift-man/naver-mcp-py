@@ -169,6 +169,8 @@ Available environment variables:
 - `NAVER_MCP_PORT`
 - `NAVER_MCP_PATH`
 - `NAVER_MCP_TRANSPORT`
+- `NAVER_MCP_REMOTE_ACCESS` (optional; `disabled`, `fastmcp-auth`, or `trusted-network`)
+- `NAVER_MCP_AUTH_JWKS_URI`, `NAVER_MCP_AUTH_ISSUER`, and `NAVER_MCP_AUTH_AUDIENCE` when using JWT authentication
 - `NAVER_HTTP_TIMEOUT_SEC`
 - `NAVER_CACHE_TTL_SEC`
 
@@ -182,6 +184,7 @@ Security note:
 - keep real credentials only in private shell exports, `.env` files excluded by `.gitignore`, or `/etc/naver-mcp.env`
 - if a real key was ever pushed to a public repository, reissue it immediately in the NAVER Cloud Platform console
 - legacy `NAVER_CLIENT_ID` and `NAVER_CLIENT_SECRET` variable names remain accepted as aliases, but the values must be NAVER API HUB credentials
+- HTTP binding to a non-loopback address is refused unless authenticated FastMCP or an explicitly protected trusted network is configured
 
 Example:
 
@@ -192,6 +195,7 @@ export NAVER_MCP_HOST="127.0.0.1"
 export NAVER_MCP_PORT="8100"
 export NAVER_MCP_PATH="/mcp"
 export NAVER_MCP_TRANSPORT="streamable-http"
+export NAVER_MCP_REMOTE_ACCESS="disabled"
 export NAVER_HTTP_TIMEOUT_SEC="8.0"
 export NAVER_CACHE_TTL_SEC="300"
 ```
@@ -224,24 +228,40 @@ export NAVER_MCP_HOST="127.0.0.1"
 export NAVER_MCP_PORT="8100"
 export NAVER_MCP_PATH="/mcp"
 export NAVER_MCP_TRANSPORT="streamable-http"
+export NAVER_MCP_REMOTE_ACCESS="disabled"
 export NAVER_HTTP_TIMEOUT_SEC="8.0"
 export NAVER_CACHE_TTL_SEC="300"
 
 .venv/bin/python -m naver_mcp.server
 ```
 
-If an MCP client runs on a different machine and must connect over the LAN:
+The server refuses an HTTP bind to `0.0.0.0` or another non-loopback address by default. Choose one protected remote-access mode before connecting from another machine.
 
-- set `NAVER_MCP_HOST=0.0.0.0`
-- open the port in your firewall if needed
-- make sure the client uses the same path as `NAVER_MCP_PATH`
+For a private LAN or VPN with a firewall source-IP allowlist:
+
+- configure the host firewall or cloud security group to allow port `8100` only from the MCP client IP or VPN subnet
+- set `NAVER_MCP_REMOTE_ACCESS=trusted-network`
+- never use this mode on an unrestricted public network
 
 For example, if the client connects to `http://192.168.1.218:8100/naver_mcp`, then your environment must include:
 
 ```bash
 export NAVER_MCP_HOST="0.0.0.0"
 export NAVER_MCP_PATH="/naver_mcp"
+export NAVER_MCP_REMOTE_ACCESS="trusted-network"
 ```
+
+For authenticated remote access, configure the FastMCP JWT verifier and use TLS. The following example validates JWTs from an existing identity provider:
+
+```bash
+export NAVER_MCP_HOST="0.0.0.0"
+export NAVER_MCP_REMOTE_ACCESS="fastmcp-auth"
+export NAVER_MCP_AUTH_JWKS_URI="https://auth.example.com/.well-known/jwks.json"
+export NAVER_MCP_AUTH_ISSUER="https://auth.example.com"
+export NAVER_MCP_AUTH_AUDIENCE="naver-mcp"
+```
+
+The server creates a FastMCP `JWTVerifier` from these values. See the [FastMCP token verification guide](https://gofastmcp.com/servers/auth/token-verification) for identity-provider and client setup. For internet-facing deployments, terminate TLS at an authenticated reverse proxy or load balancer and restrict direct access to port `8100`.
 
 ## Linux Server Deployment With systemd
 
@@ -249,7 +269,8 @@ Recommended production pattern:
 
 1. Keep the service bound to `127.0.0.1`.
 2. Load secrets through `systemd EnvironmentFile` or another secret manager.
-3. Put `nginx` or another reverse proxy in front if external access is needed.
+3. Put an authenticated TLS reverse proxy in front if external access is needed.
+4. Do not expose port `8100` publicly.
 
 Example deployment directory:
 
@@ -279,6 +300,7 @@ NAVER_MCP_HOST=127.0.0.1
 NAVER_MCP_PORT=8100
 NAVER_MCP_PATH=/mcp
 NAVER_MCP_TRANSPORT=streamable-http
+NAVER_MCP_REMOTE_ACCESS=disabled
 NAVER_HTTP_TIMEOUT_SEC=8.0
 NAVER_CACHE_TTL_SEC=300
 EOF
@@ -291,14 +313,15 @@ The verification output must show `root:root 600 /etc/naver-mcp.env`.
 
 This file should stay on the server only and must not be copied into the repository.
 
-If your MCP client connects over the network directly, update these two values:
+If your MCP client connects directly over a firewall-restricted LAN or VPN, update these values only after creating a source-IP allowlist:
 
 ```bash
 NAVER_MCP_HOST=0.0.0.0
 NAVER_MCP_PATH=/naver_mcp
+NAVER_MCP_REMOTE_ACCESS=trusted-network
 ```
 
-The client URL must exactly match the path you configure here.
+The client URL must exactly match the path you configure here. Without `fastmcp-auth` or `trusted-network`, the service intentionally refuses a non-loopback bind.
 
 ### 3. Create the systemd unit
 
@@ -357,6 +380,8 @@ sudo systemctl status naver-mcp --no-pager
 
 When migrating from the old Naver developer API, replace the credential entries with `NAVER_API_HUB_CLIENT_ID` and `NAVER_API_HUB_CLIENT_SECRET` in the `sudoedit` step. Save them before running the restart command.
 
+If an existing deployment uses a non-loopback host, also configure `NAVER_MCP_REMOTE_ACCESS=trusted-network` only after verifying its firewall/VPN allowlist, or migrate it to `fastmcp-auth`. Otherwise the updated service will refuse to start rather than expose an unauthenticated endpoint.
+
 ## MCP Client URL
 
 The client URL must match both the host, port, and path from your environment.
@@ -364,7 +389,8 @@ The client URL must match both the host, port, and path from your environment.
 Examples:
 
 - default local setup: `http://127.0.0.1:8100/mcp`
-- LAN exposure with custom path: `http://192.168.1.218:8100/naver_mcp`
+- protected LAN/VPN exposure with custom path: `http://192.168.1.218:8100/naver_mcp`
+- authenticated public endpoint through a TLS proxy: `https://naver-mcp.example.com/naver_mcp`
 
 If the client uses `/naver_mcp` but the server is configured with `/mcp`, requests will fail even if the process is running.
 
@@ -386,6 +412,7 @@ Common causes:
 - service is not running
 - `NAVER_MCP_HOST` is `127.0.0.1` but you are connecting from another machine
 - firewall is blocking the port
+- non-loopback binding was refused because `NAVER_MCP_REMOTE_ACCESS` protection is missing
 
 ### `status=203/EXEC`
 

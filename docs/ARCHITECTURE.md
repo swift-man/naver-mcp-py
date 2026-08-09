@@ -68,6 +68,8 @@ Holds environment parsing and defaults:
 - API credentials
 - host and port
 - MCP transport configuration
+- remote-access protection mode
+- JWT verifier configuration for authenticated remote access
 - timeout and cache settings
 
 ### `client.py`
@@ -207,6 +209,8 @@ Book and shopping intents use `web` and `blog` fallback sources because the dedi
 - Errors should include a stable error code and retryable flag.
 - Cache should be conservative and time-bounded.
 - Credential errors should surface clearly.
+- HTTP servers should bind to loopback by default.
+- Non-loopback binding requires FastMCP authentication or an operator-confirmed firewall/VPN allowlist.
 
 ## Cache Guidance
 

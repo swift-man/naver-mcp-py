@@ -11,7 +11,8 @@ requires-python = ">=3.10"
 dependencies = []
 
 [project.optional-dependencies]
-server = ["fastmcp>=2.0.0"]
+# 보안 수정이 포함된 3.4.6 이상을 사용하고 다음 메이저의 호환성 변경은 차단한다.
+server = ["fastmcp>=3.4.6,<4"]
 dev = ["pytest>=8.0.0", "ruff>=0.4.0"]
 
 [tool.setuptools]

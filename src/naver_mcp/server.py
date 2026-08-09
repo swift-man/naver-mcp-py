@@ -11,8 +11,10 @@ from .tools_search import SearchTools
 
 try:
     from fastmcp import FastMCP
+    from fastmcp.server.auth.providers.jwt import JWTVerifier
 except ImportError:  # pragma: no cover - optional runtime dependency
     FastMCP = None  # type: ignore[assignment]
+    JWTVerifier = None  # type: ignore[assignment]
 
 
 class _ToolErrorBoundary:
@@ -42,6 +44,8 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
 
     # 서버는 요청 객체 생성과 도구 등록만 맡고, 실제 비즈니스 로직은 tools 계층으로 위임한다.
     resolved_config = config or NaverMCPConfig.from_env()
+    # 원격 HTTP 바인딩은 인증 또는 운영자가 확인한 네트워크 보호 없이는 허용하지 않는다.
+    resolved_config.require_safe_remote_access()
     client = NaverClient(resolved_config)
     search_tools = _ToolErrorBoundary(
         SearchTools(
@@ -52,7 +56,21 @@ def create_server(config: Optional[NaverMCPConfig] = None) -> Any:
     )
     datalab_tools = _ToolErrorBoundary(DataLabTools(client, config=resolved_config))
 
-    server = FastMCP("naver-mcp-py")
+    auth = None
+    if resolved_config.remote_access == "fastmcp-auth":
+        if JWTVerifier is None:  # pragma: no cover - FastMCP import guard handles this
+            raise RuntimeError("FastMCP JWT authentication is not available")
+        auth = JWTVerifier(
+            jwks_uri=resolved_config.auth_jwks_uri,
+            issuer=resolved_config.auth_issuer,
+            audience=resolved_config.auth_audience,
+        )
+
+    server = FastMCP(
+        "naver-mcp-py",
+        auth=auth,
+        strict_input_validation=True,
+    )
 
     @server.tool()
     def search_local(

@@ -12,12 +12,21 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from naver_mcp.config import NaverMCPConfig
+from naver_mcp.errors import ValidationError
 from naver_mcp.server import create_server
 
 
 class FakeFastMCP:
-    def __init__(self, name: str) -> None:
+    def __init__(
+        self,
+        name: str,
+        *,
+        auth: Any = None,
+        strict_input_validation: bool = False,
+    ) -> None:
         self.name = name
+        self.auth = auth
+        self.strict_input_validation = strict_input_validation
         self.tools: dict[str, Callable[..., Any]] = {}
 
     def tool(self) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -28,7 +37,82 @@ class FakeFastMCP:
         return register
 
 
+class FakeJWTVerifier:
+    def __init__(self, **config: Any) -> None:
+        self.config = config
+
+
 class ServerContractTest(unittest.TestCase):
+    def test_create_server_refuses_unprotected_remote_http_binding(self) -> None:
+        config = NaverMCPConfig(
+            client_id="client-id",
+            client_secret="client-secret",
+            host="0.0.0.0",
+        )
+
+        with patch("naver_mcp.server.FastMCP", FakeFastMCP):
+            with self.assertRaises(ValidationError):
+                create_server(config)
+
+    def test_remote_http_binding_accepts_declared_protection(self) -> None:
+        protected_configs = [
+            NaverMCPConfig(host="0.0.0.0", remote_access="trusted-network"),
+            NaverMCPConfig(
+                host="0.0.0.0",
+                remote_access="fastmcp-auth",
+                auth_jwks_uri="https://auth.example.com/.well-known/jwks.json",
+                auth_issuer="https://auth.example.com",
+                auth_audience="naver-mcp",
+            ),
+        ]
+
+        for config in protected_configs:
+            with self.subTest(remote_access=config.remote_access):
+                config.require_safe_remote_access()
+
+    def test_fastmcp_auth_mode_requires_jwt_configuration(self) -> None:
+        for host in ("127.0.0.1", "0.0.0.0"):
+            with self.subTest(host=host), self.assertRaises(ValidationError):
+                config = NaverMCPConfig(host=host, remote_access="fastmcp-auth")
+                config.require_safe_remote_access()
+
+    def test_fastmcp_auth_mode_requires_https_jwks(self) -> None:
+        config = NaverMCPConfig(
+            host="0.0.0.0",
+            remote_access="fastmcp-auth",
+            auth_jwks_uri="http://auth.example.com/.well-known/jwks.json",
+            auth_issuer="https://auth.example.com",
+            auth_audience="naver-mcp",
+        )
+
+        with self.assertRaises(ValidationError):
+            config.require_safe_remote_access()
+
+    def test_create_server_attaches_jwt_verifier(self) -> None:
+        config = NaverMCPConfig(
+            host="0.0.0.0",
+            remote_access="fastmcp-auth",
+            auth_jwks_uri="https://auth.example.com/.well-known/jwks.json",
+            auth_issuer="https://auth.example.com",
+            auth_audience="naver-mcp",
+        )
+
+        with (
+            patch("naver_mcp.server.FastMCP", FakeFastMCP),
+            patch("naver_mcp.server.JWTVerifier", FakeJWTVerifier),
+        ):
+            server = create_server(config)
+
+        self.assertEqual(
+            server.auth.config,
+            {
+                "jwks_uri": "https://auth.example.com/.well-known/jwks.json",
+                "issuer": "https://auth.example.com",
+                "audience": "naver-mcp",
+            },
+        )
+        self.assertTrue(server.strict_input_validation)
+
     def test_all_search_and_datalab_tools_are_registered(self) -> None:
         with patch("naver_mcp.server.FastMCP", FakeFastMCP):
             server = create_server(

@@ -16,6 +16,8 @@ All notable changes to this project are documented in this file.
 - Changed book and shopping intent routing in `search_naver_auto` to use disclosed web and blog fallbacks.
 - Updated Linux and systemd setup instructions for the new credentials and API base URL.
 - Kept the legacy credential environment variable names as compatibility aliases.
+- Require an explicit authenticated or trusted-network mode before binding HTTP to a non-loopback address.
+- Require FastMCP 3.4.6 or newer within the 3.x line for supported JWT authentication and security fixes.
 
 ### Fixed
 
@@ -23,3 +25,4 @@ All notable changes to this project are documented in this file.
 - Return structured MCP errors for validation, authentication, quota, timeout, and retired-service failures.
 - Reject scalar DataLab list inputs and reversed date ranges before sending an API request.
 - Prevent arbitrary long numeric queries from being classified as ISBN searches without a valid checksum.
+- Reject invalid DataLab response elements, non-finite ratios, invalid timeout values, and non-integer pagination inputs.

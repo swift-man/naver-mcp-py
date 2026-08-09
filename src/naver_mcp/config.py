@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import ipaddress
+import math
 import os
+import urllib.parse
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
 from .errors import ValidationError
 
 DEFAULT_API_BASE_URL = "https://naverapihub.apigw.ntruss.com"
+HTTP_TRANSPORTS = {"http", "sse", "streamable-http"}
+REMOTE_ACCESS_MODES = {"disabled", "fastmcp-auth", "trusted-network"}
 
 
 def _read_str(env: Mapping[str, str], key: str, default: str = "") -> str:
@@ -47,6 +52,16 @@ def _read_float(env: Mapping[str, str], key: str, default: float) -> float:
         raise ValidationError(f"{key} must be a float") from exc
 
 
+def _is_loopback_host(host: str) -> bool:
+    normalized = host.strip().strip("[]")
+    if normalized.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
 @dataclass(frozen=True)
 class NaverMCPConfig:
     client_id: str = ""
@@ -58,6 +73,32 @@ class NaverMCPConfig:
     http_timeout_sec: float = 8.0
     cache_ttl_sec: int = 300
     api_base_url: str = DEFAULT_API_BASE_URL
+    remote_access: str = "disabled"
+    auth_jwks_uri: str = ""
+    auth_issuer: str = ""
+    auth_audience: str = ""
+
+    def __post_init__(self) -> None:
+        timeout = self.http_timeout_sec
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+            raise ValidationError("http_timeout_sec must be a finite positive number")
+        try:
+            normalized_timeout = float(timeout)
+        except (OverflowError, ValueError) as exc:
+            raise ValidationError(
+                "http_timeout_sec must be a finite positive number"
+            ) from exc
+        if not math.isfinite(normalized_timeout) or normalized_timeout <= 0:
+            raise ValidationError("http_timeout_sec must be a finite positive number")
+        object.__setattr__(self, "http_timeout_sec", normalized_timeout)
+
+        if not isinstance(self.remote_access, str):
+            raise ValidationError("remote_access must be a string")
+        remote_access = self.remote_access.strip().lower()
+        if remote_access not in REMOTE_ACCESS_MODES:
+            allowed = ", ".join(sorted(REMOTE_ACCESS_MODES))
+            raise ValidationError(f"remote_access must be one of: {allowed}")
+        object.__setattr__(self, "remote_access", remote_access)
 
     @classmethod
     def from_env(
@@ -83,6 +124,13 @@ class NaverMCPConfig:
                 _read_str(source, "NAVER_API_BASE_URL", DEFAULT_API_BASE_URL)
                 or DEFAULT_API_BASE_URL
             ),
+            remote_access=(
+                _read_str(source, "NAVER_MCP_REMOTE_ACCESS", "disabled")
+                or "disabled"
+            ),
+            auth_jwks_uri=_read_str(source, "NAVER_MCP_AUTH_JWKS_URI"),
+            auth_issuer=_read_str(source, "NAVER_MCP_AUTH_ISSUER"),
+            auth_audience=_read_str(source, "NAVER_MCP_AUTH_AUDIENCE"),
         )
 
     def require_credentials(self) -> None:
@@ -90,4 +138,26 @@ class NaverMCPConfig:
             return
         raise ValidationError(
             "NAVER_API_HUB_CLIENT_ID and NAVER_API_HUB_CLIENT_SECRET must be configured"
+        )
+
+    def require_safe_remote_access(self) -> None:
+        if self.remote_access == "fastmcp-auth":
+            if self.auth_jwks_uri and self.auth_issuer and self.auth_audience:
+                jwks_url = urllib.parse.urlsplit(self.auth_jwks_uri)
+                if jwks_url.scheme != "https" or not jwks_url.netloc:
+                    raise ValidationError(
+                        "NAVER_MCP_AUTH_JWKS_URI must be a valid HTTPS URL"
+                    )
+                return
+            raise ValidationError(
+                "NAVER_MCP_AUTH_JWKS_URI, NAVER_MCP_AUTH_ISSUER, and "
+                "NAVER_MCP_AUTH_AUDIENCE must be configured for fastmcp-auth"
+            )
+        if self.transport not in HTTP_TRANSPORTS or _is_loopback_host(self.host):
+            return
+        if self.remote_access == "trusted-network":
+            return
+        raise ValidationError(
+            "non-loopback HTTP binding requires NAVER_MCP_REMOTE_ACCESS="
+            "fastmcp-auth or trusted-network"
         )

@@ -35,12 +35,16 @@ def _validate_query(query: str) -> str:
 
 
 def _validate_display(display: int) -> int:
+    if isinstance(display, bool) or not isinstance(display, int):
+        raise ValidationError("display must be an integer")
     if not 1 <= display <= MAX_DISPLAY:
         raise ValidationError("display must be between 1 and 100")
     return display
 
 
 def _validate_start(start: int) -> int:
+    if isinstance(start, bool) or not isinstance(start, int):
+        raise ValidationError("start must be an integer")
     if not 1 <= start <= MAX_START:
         raise ValidationError("start must be between 1 and 1000")
     return start

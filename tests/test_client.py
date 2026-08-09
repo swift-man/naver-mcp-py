@@ -124,6 +124,15 @@ class NaverClientTest(unittest.TestCase):
 
         self.assertEqual(config.api_base_url, "https://api.example.com/naver/")
 
+    def test_config_rejects_non_positive_or_non_finite_timeout(self) -> None:
+        for value in ("0", "-1", "nan", "inf", "-inf"):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                NaverMCPConfig.from_env({"NAVER_HTTP_TIMEOUT_SEC": value})
+
+        for value in (True, 10**400):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                NaverMCPConfig(http_timeout_sec=value)
+
     def test_search_requests_use_api_hub_paths_and_headers(self) -> None:
         self.client.search_local(LocalSearchRequest(query="카페"))
         self.client.search_blog(BlogSearchRequest(query="카페"))
@@ -363,13 +372,26 @@ class NaverClientTest(unittest.TestCase):
             time_unit="date",
             keyword_groups=[DataLabKeywordGroup(group_name="파이썬", keywords=["파이썬"])],
         )
-        client = NaverClient(
-            self.config,
-            transport=lambda *args: {"results": [{"data": None}]},
-        )
+        payloads = [
+            {"results": [None]},
+            {"results": [{"data": None}]},
+            {"results": [{"data": [None]}]},
+            {"results": [{"data": [{"ratio": None}]}]},
+            {"results": [{"data": [{"ratio": True}]}]},
+            {"results": [{"data": [{"ratio": "12.3"}]}]},
+            {"results": [{"data": [{"ratio": float("nan")}]}]},
+            {"results": [{"data": [{"ratio": float("inf")}]}]},
+            {"results": [{"data": [{"ratio": 10**400}]}]},
+        ]
 
-        with self.assertRaises(NaverAPIError):
-            client.datalab_search_trends(request)
+        for payload in payloads:
+            with self.subTest(payload=payload):
+                client = NaverClient(
+                    self.config,
+                    transport=lambda *args, payload=payload: payload,
+                )
+                with self.assertRaises(NaverAPIError):
+                    client.datalab_search_trends(request)
 
     def test_default_transport_replaces_invalid_utf8_bytes(self) -> None:
         response = mock.MagicMock()

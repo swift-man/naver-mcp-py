@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import socket
 import time
 import urllib.error
@@ -271,10 +272,22 @@ class NaverClient:
                 raise NaverAPIError("Naver API returned invalid DataLab results")
             for result in results:
                 if not isinstance(result, Mapping):
-                    continue
+                    raise NaverAPIError("Naver API returned invalid DataLab result")
                 data = result.get("data", [])
                 if not isinstance(data, list):
                     raise NaverAPIError("Naver API returned invalid DataLab data")
+                for point in data:
+                    if not isinstance(point, Mapping):
+                        raise NaverAPIError("Naver API returned invalid DataLab data point")
+                    ratio = point.get("ratio")
+                    if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
+                        raise NaverAPIError("Naver API returned invalid DataLab ratio")
+                    try:
+                        finite_ratio = math.isfinite(float(ratio))
+                    except (OverflowError, ValueError):
+                        finite_ratio = False
+                    if not finite_ratio:
+                        raise NaverAPIError("Naver API returned invalid DataLab ratio")
 
         return payload
 
