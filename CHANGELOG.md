@@ -18,6 +18,7 @@ All notable changes to this project are documented in this file.
 - Kept the legacy credential environment variable names as compatibility aliases.
 - Require an explicit authenticated or trusted-network mode before binding HTTP to a non-loopback address.
 - Require FastMCP 3.4.6 or newer within the 3.x line for supported JWT authentication and security fixes.
+- Pin the documented Ruff command to the project's core lint rules so fresh development installs remain reproducible across Ruff releases.
 
 ### Fixed
 
