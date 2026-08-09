@@ -185,6 +185,7 @@ Security note:
 - if a real key was ever pushed to a public repository, reissue it immediately in the NAVER Cloud Platform console
 - legacy `NAVER_CLIENT_ID` and `NAVER_CLIENT_SECRET` variable names remain accepted as aliases, but the values must be NAVER API HUB credentials
 - upstream `NAVER_API_BASE_URL` overrides must use HTTPS; plain HTTP is accepted only for explicit loopback hosts during local testing
+- upstream redirects are followed only within the same scheme, host, and effective port so credentials cannot cross origins or downgrade to HTTP
 - HTTP binding to a non-loopback address is refused unless authenticated FastMCP or an explicitly protected trusted network is configured
 
 Example:

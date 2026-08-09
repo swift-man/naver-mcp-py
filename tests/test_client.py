@@ -14,7 +14,7 @@ SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from naver_mcp.client import NaverClient
+from naver_mcp.client import NaverClient, _SameOriginRedirectHandler
 from naver_mcp.config import NaverMCPConfig
 from naver_mcp.errors import (
     NaverAPIError,
@@ -528,6 +528,7 @@ class NaverClientTest(unittest.TestCase):
         payloads = [
             {},
             {"results": [None]},
+            {"results": [{}]},
             {"results": [{"data": None}]},
             {"results": [{"data": [None]}]},
             {"results": [{"data": [{"ratio": None}]}]},
@@ -574,7 +575,7 @@ class NaverClientTest(unittest.TestCase):
         response.__enter__.return_value = response
         response.read.return_value = b'{"note":"\xff"}'
 
-        with mock.patch("naver_mcp.client.urllib.request.urlopen", return_value=response):
+        with mock.patch("naver_mcp.client._safe_urlopen", return_value=response):
             payload = self.client._default_transport(
                 "GET",
                 "https://api.example.com/test",
@@ -598,7 +599,7 @@ class NaverClientTest(unittest.TestCase):
                 response.read.side_effect = error
 
                 with mock.patch(
-                    "naver_mcp.client.urllib.request.urlopen",
+                    "naver_mcp.client._safe_urlopen",
                     return_value=response,
                 ):
                     with self.assertRaises(NaverAPIError) as context:
@@ -640,7 +641,7 @@ class NaverClientTest(unittest.TestCase):
                 )
 
                 with mock.patch(
-                    "naver_mcp.client.urllib.request.urlopen",
+                    "naver_mcp.client._safe_urlopen",
                     side_effect=http_error,
                 ):
                     with self.assertRaises(expected_error) as context:
@@ -674,7 +675,7 @@ class NaverClientTest(unittest.TestCase):
                 )
 
                 with mock.patch(
-                    "naver_mcp.client.urllib.request.urlopen",
+                    "naver_mcp.client._safe_urlopen",
                     side_effect=http_error,
                 ):
                     with self.assertRaises(expected_error) as context:
@@ -688,6 +689,48 @@ class NaverClientTest(unittest.TestCase):
 
                 self.assertEqual(context.exception.status_code, status_code)
                 self.assertEqual(context.exception.is_retryable, retryable)
+
+    def test_redirect_handler_allows_only_same_origin(self) -> None:
+        handler = _SameOriginRedirectHandler()
+        request = urllib.request.Request(
+            "https://api.example.com/search",
+            headers={"X-NCP-APIGW-API-KEY": "secret"},
+        )
+
+        redirected = handler.redirect_request(
+            request,
+            None,
+            302,
+            "Found",
+            {},
+            "https://api.example.com:443/next",
+        )
+
+        self.assertIsNotNone(redirected)
+        assert redirected is not None
+        self.assertEqual(
+            redirected.get_header("X-ncp-apigw-api-key"),
+            "secret",
+        )
+
+        unsafe_urls = [
+            "https://other.example.com/next",
+            "http://api.example.com/next",
+            "https://api.example.com:444/next",
+            "https://api.example.com:99999/next",
+            "https://user@api.example.com/next",
+            "ftp://api.example.com/next",
+        ]
+        for unsafe_url in unsafe_urls:
+            with self.subTest(unsafe_url=unsafe_url), self.assertRaises(NaverAPIError):
+                handler.redirect_request(
+                    request,
+                    None,
+                    302,
+                    "Found",
+                    {},
+                    unsafe_url,
+                )
 
     def test_timeout_fails_fast_without_retry(self) -> None:
         calls = 0

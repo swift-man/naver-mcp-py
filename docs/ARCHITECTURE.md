@@ -211,6 +211,7 @@ Book and shopping intents use `web` and `blog` fallback sources because the dedi
 - Cache should be conservative and time-bounded.
 - Credential errors should surface clearly.
 - Upstream API responses should be type- and range-checked before normalization and caching.
+- Upstream redirects must preserve scheme, host, and effective port before authentication headers are forwarded.
 - HTTP servers should bind to loopback by default.
 - Non-loopback binding requires FastMCP authentication or an operator-confirmed firewall/VPN allowlist.
 

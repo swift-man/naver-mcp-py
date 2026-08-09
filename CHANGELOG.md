@@ -26,3 +26,4 @@ All notable changes to this project are documented in this file.
 - Reject scalar DataLab list inputs and reversed date ranges before sending an API request.
 - Prevent arbitrary long numeric queries from being classified as ISBN searches without a valid checksum.
 - Reject invalid DataLab response elements, out-of-range ratios, malformed errata values, unsafe API base URLs, invalid timeout values, and non-integer pagination inputs.
+- Prevent authentication headers from crossing origins or downgrading to HTTP through upstream redirects, and reject DataLab results that omit their `data` field.

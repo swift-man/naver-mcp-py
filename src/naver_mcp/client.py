@@ -8,7 +8,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, NoReturn, Optional
 
 from .config import NaverMCPConfig
 from .errors import (
@@ -44,6 +44,57 @@ Transport = Callable[
     [str, str, Mapping[str, str], Optional[bytes], float],
     Mapping[str, Any],
 ]
+
+
+def _url_origin(url: str) -> Optional[tuple[str, str, int]]:
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return None
+    effective_port = port or (443 if parsed.scheme == "https" else 80)
+    return parsed.scheme, parsed.hostname, effective_port
+
+
+class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(
+        self,
+        request: urllib.request.Request,
+        file_pointer: Any,
+        code: int,
+        message: str,
+        headers: Any,
+        new_url: str,
+    ) -> Optional[urllib.request.Request]:
+        source_origin = _url_origin(request.full_url)
+        target_origin = _url_origin(new_url)
+        if (
+            source_origin is None
+            or target_origin is None
+            or source_origin != target_origin
+        ):
+            raise NaverAPIError("Naver API redirect target is not allowed")
+        return super().redirect_request(
+            request,
+            file_pointer,
+            code,
+            message,
+            headers,
+            new_url,
+        )
+
+
+def _safe_urlopen(request: urllib.request.Request, timeout: float) -> Any:
+    # 인증 헤더가 교차 출처 또는 HTTPS→HTTP 리다이렉트로 전달되지 않게 제한한다.
+    opener = urllib.request.build_opener(_SameOriginRedirectHandler())
+    return opener.open(request, timeout=timeout)
 
 
 class NaverClient:
@@ -222,7 +273,8 @@ class NaverClient:
             headers["Content-Type"] = "application/json"
 
         # max_retries는 최초 요청 이후 허용할 추가 시도 횟수다.
-        for attempt in range(self._max_retries + 1):
+        attempt = 0
+        while True:
             try:
                 response = self._transport(
                     method,
@@ -237,6 +289,7 @@ class NaverClient:
                 if not exc.is_retryable or attempt >= self._max_retries:
                     raise
                 self._sleep_fn(min(0.2 * (attempt + 1), 1.0))
+                attempt += 1
 
     @staticmethod
     def _validate_response_payload(
@@ -291,7 +344,9 @@ class NaverClient:
             for result in results:
                 if not isinstance(result, Mapping):
                     raise NaverAPIError("Naver API returned invalid DataLab result")
-                data = result.get("data", [])
+                if "data" not in result:
+                    raise NaverAPIError("Naver API response is missing DataLab data")
+                data = result["data"]
                 if not isinstance(data, list):
                     raise NaverAPIError("Naver API returned invalid DataLab data")
                 for point in data:
@@ -349,7 +404,7 @@ class NaverClient:
             method=method,
         )
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with _safe_urlopen(request, timeout) as response:
                 raw_body = self._read_response_body(response)
         except urllib.error.HTTPError as exc:
             raw_body = self._read_http_error_body(exc)
@@ -408,7 +463,7 @@ class NaverClient:
             # 본문이 손상되어도 이미 받은 인증·한도·서버 상태 분류를 우선한다.
             self._raise_for_http_error(error.code, "")
 
-    def _raise_for_http_error(self, status_code: int, body: str) -> None:
+    def _raise_for_http_error(self, status_code: int, body: str) -> NoReturn:
         # 상위 계층이 안정적으로 처리할 수 있도록 HTTP 상태를 내부 에러 코드로 매핑한다.
         message = self._extract_error_message(body, status_code)
         if status_code in {401, 403}:

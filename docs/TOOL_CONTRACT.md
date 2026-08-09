@@ -33,6 +33,8 @@ Client Secret: X-NCP-APIGW-API-KEY
 
 `NAVER_API_BASE_URL` must use HTTPS. Plain HTTP is accepted only for an explicit
 loopback host such as `localhost`, `127.0.0.1`, or `::1` during local testing.
+Redirects are accepted only when the scheme, host, and effective port remain the
+same, so API credentials are never forwarded to another origin or to HTTP.
 
 ## Common Search Response Shape
 
@@ -418,6 +420,7 @@ Notes:
 - `keywords` appears for search trends and shopping keyword tools
 - `group` appears only for breakdown tools such as device, gender, or age
 - `ratio` is a finite number from `0` through `100`
+- every result object must include a `data` array; a missing field is an upstream contract error, not an empty trend
 
 ### `datalab_search_trends`
 
